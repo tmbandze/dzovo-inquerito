@@ -7,6 +7,8 @@
  *   • "Professores" — uma linha por professor avaliado (liga-se à resposta pela coluna id_resposta)
  *
  * Instalação: ver README do projeto (secção "Ligar à Google Sheet").
+ *
+ * @OnlyCurrentDoc
  */
 
 const SHEET_RESPOSTAS = 'Respostas'
@@ -178,6 +180,8 @@ function onOpen() {
   SpreadsheetApp.getUi().createMenu('Inquérito')
     .addItem('Atualizar painel', 'atualizarPainel')
     .addItem('Atualizar automaticamente (de hora a hora)', 'ativarAtualizacaoAutomatica')
+    .addSeparator()
+    .addItem('Apagar respostas de teste', 'apagarRespostasTeste')
     .addToUi()
 }
 
@@ -200,6 +204,38 @@ function ativarAtualizacaoAutomatica() {
   const existe = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'atualizarPainel' })
   if (!existe) ScriptApp.newTrigger('atualizarPainel').timeBased().everyHours(1).create()
   SpreadsheetApp.getActiveSpreadsheet().toast('O painel passa a atualizar-se de hora a hora.', 'Inquérito')
+}
+
+/** Apaga as linhas com edicao = "TESTE" nas folhas Respostas e Professores. */
+function apagarRespostasTeste() {
+  const ui = SpreadsheetApp.getUi()
+  const ss = SpreadsheetApp.getActiveSpreadsheet()
+  const folhas = [SHEET_RESPOSTAS, SHEET_PROFESSORES].map(function (n) { return ss.getSheetByName(n) }).filter(Boolean)
+  const linhasTeste = function (sh) {
+    if (sh.getLastRow() < 2) return []
+    const col = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].indexOf('edicao')
+    if (col === -1) return []
+    return sh.getRange(2, col + 1, sh.getLastRow() - 1, 1).getValues()
+      .map(function (v, i) { return String(v[0]).trim().toUpperCase() === 'TESTE' ? i + 2 : 0 })
+      .filter(Boolean)
+  }
+  const total = folhas.reduce(function (n, sh) { return n + linhasTeste(sh).length }, 0)
+  if (!total) {
+    ui.alert('Não há respostas de teste para apagar.')
+    return
+  }
+  const ok = ui.alert('Apagar respostas de teste',
+    'Vão ser apagadas ' + total + ' linhas com "TESTE" na coluna edicao (folhas Respostas e Professores). As outras respostas não são tocadas. Continuar?',
+    ui.ButtonSet.YES_NO)
+  if (ok !== ui.Button.YES) return
+  folhas.forEach(function (sh) {
+    const linhas = linhasTeste(sh)
+    // O Sheets não deixa apagar todas as linhas abaixo do cabeçalho fixo
+    if (sh.getMaxRows() - linhas.length <= sh.getFrozenRows()) sh.insertRowAfter(sh.getMaxRows())
+    linhas.reverse().forEach(function (r) { sh.deleteRow(r) })
+  })
+  atualizarPainel()
+  ss.toast(total + ' linhas de teste apagadas.', 'Inquérito')
 }
 
 function desenharPaineis_(ss) {

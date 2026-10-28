@@ -52,6 +52,8 @@ nada é enviado e a resposta aparece na consola do navegador.
    - Executar como: **Eu**
    - Quem tem acesso: **Qualquer pessoa**
 5. Autorizar quando o Google pedir e copiar o **URL da aplicação web** (termina em `/exec`).
+   Se aparecer **"O Google não validou esta app"**, é normal: a app é o teu próprio script.
+   Clicar **Avançadas → Aceder a … (não seguro)** e depois **Permitir**.
 6. Colar esse URL em `src/config/survey.ts`:
    ```ts
    export const ENDPOINT_URL = 'https://script.google.com/macros/s/XXXX/exec'
