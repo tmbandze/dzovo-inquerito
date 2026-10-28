@@ -18,7 +18,7 @@ const MAX_TEXTO = 2000
 function doPost(e) {
   const lock = LockService.getScriptLock()
   try {
-    lock.waitLock(20000)
+    lock.waitLock(30000)
     const data = JSON.parse(e.postData.contents)
     if (!data || typeof data.resposta !== 'object') throw new Error('Formato inválido')
 
@@ -29,6 +29,13 @@ function doPost(e) {
     ;(data.professores || []).forEach(function (p) {
       appendRow_(ss, SHEET_PROFESSORES, Object.assign({ data_hora: agora }, p))
     })
+
+    // O painel é atualizado a cada resposta; uma falha aqui não perde a resposta já gravada
+    try {
+      atualizarPaineis_(ss)
+    } catch (err) {
+      console.error('Painel não atualizado: ' + err)
+    }
 
     return json_({ ok: true })
   } catch (err) {
@@ -194,10 +201,14 @@ function onEdit(e) {
 
 function atualizarPainel() {
   const ss = SpreadsheetApp.getActiveSpreadsheet()
+  atualizarPaineis_(ss)
+  ss.toast('Painel atualizado.', 'Inquérito')
+}
+
+function atualizarPaineis_(ss) {
   formatarFolhaDados_(ss.getSheetByName(SHEET_RESPOSTAS))
   formatarFolhaDados_(ss.getSheetByName(SHEET_PROFESSORES))
   desenharPaineis_(ss)
-  ss.toast('Painel atualizado.', 'Inquérito')
 }
 
 function ativarAtualizacaoAutomatica() {
@@ -363,6 +374,7 @@ const ESTILOS = {
   cabecalho: function (r) { r.setFontSize(8).setFontWeight('bold').setFontColor(COR.cinza) },
   linha: function (r) { r.setBorder(null, null, true, null, null, null, COR.linha, SpreadsheetApp.BorderStyle.SOLID) },
   centro: function (r) { r.setHorizontalAlignment('center') },
+  inteiro: function (r) { r.setNumberFormat('0').setHorizontalAlignment('center') },
   media: function (r) { r.setNumberFormat('0.0').setFontWeight('bold').setHorizontalAlignment('center') },
   pct: function (r) { r.setNumberFormat('0%').setHorizontalAlignment('center') },
   nps: function (r) { r.setNumberFormat('+0;-0;0').setFontWeight('bold').setHorizontalAlignment('center') },
@@ -445,7 +457,23 @@ function corNota_(v) { return v >= 4 ? COR.verde : v >= 3 ? COR.ambar : COR.verm
 
 function barra_(v, max, cor) {
   if (typeof v !== 'number') return ''
-  return '=SPARKLINE({' + v.toFixed(3) + '},{"charttype","bar";"max",' + max + ';"color1","' + cor + '"})'
+  // A fórmula é lida no formato regional da folha: com vírgula decimal (ex.: pt_MZ),
+  // os argumentos separam-se com ";" e as colunas de uma lista {…} com "\"
+  const virgula = usaVirgulaDecimal_()
+  const arg = virgula ? ';' : ',', col = virgula ? '\\' : ','
+  const num = function (x) { return virgula ? String(x).replace('.', ',') : String(x) }
+  return '=SPARKLINE({' + num(v.toFixed(3)) + '}' + arg +
+    '{"charttype"' + col + '"bar";"max"' + col + num(max) + ';"color1"' + col + '"' + cor + '"})'
+}
+
+let virgulaDecimal_
+function usaVirgulaDecimal_() {
+  if (virgulaDecimal_ === undefined) {
+    const loc = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetLocale()
+    const ponto = /^(en|ja|zh|ko|th|iw|he|hi|ms|fil|tl|ga)(_|$)|^(es_MX|es_US|de_CH|fr_CH|it_CH)$/
+    virgulaDecimal_ = !ponto.test(loc)
+  }
+  return virgulaDecimal_
 }
 
 function pct_(n, total) { return total ? Math.round(n / total * 100) + '%' : '—' }
@@ -626,7 +654,7 @@ function desenharPainel_(sh, ctx) {
     })
     let r = g.linha(lRec, 26); g.estilo('linha', a1_(r, 2, 8)).estilo('media', a1_(r, 3, ultimaG))
     r = g.linha(lNps, 26); g.estilo('linha', a1_(r, 2, 8)).estilo('nps', a1_(r, 3, ultimaG))
-    r = g.linha(lN, 26); g.estilo('linha', a1_(r, 2, 8)).estilo('centro', a1_(r, 3, ultimaG))
+    r = g.linha(lN, 26); g.estilo('linha', a1_(r, 2, 8)).estilo('inteiro', a1_(r, 3, ultimaG))
   }
 
   // detalhe por pergunta
