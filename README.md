@@ -64,6 +64,20 @@ Se mais tarde se acrescentarem perguntas, as colunas novas são adicionadas no f
 > Se alterares o `Codigo.gs`, faz **Implementar → Gerir implementações → Editar → Nova versão**
 > para manter o mesmo URL.
 
+### Painel de resultados
+
+O mesmo `Codigo.gs` cria um menu **Inquérito** na Google Sheet (aparece ao abrir a folha):
+
+- **Atualizar painel**: cria/atualiza o separador **Painel** (cartões com respostas, satisfação
+  média, recomendação e NPS; médias por área e por pergunta; pontos fortes e a melhorar;
+  comparação entre recintos e currículos; melhorias pedidas; quem respondeu; comentários) e o
+  separador **Painel Professores** (confidencial). Também arruma o aspeto das folhas de respostas.
+- **Atualizar automaticamente (de hora a hora)**: liga a atualização automática.
+
+Os filtros (recinto, currículo, classe, edição) escolhem-se no topo do Painel. Para apresentar,
+**Ficheiro → Transferir → PDF**, escolhendo "Folha atual". O painel não mostra dados de contacto.
+Não mudar o texto dos cabeçalhos das folhas Respostas e Professores: são usados para gravar.
+
 ## 3. Publicar no GitHub Pages
 
 1. Criar um repositório no GitHub (por exemplo `dzovo-inquerito`) e enviar esta pasta:
