@@ -15,7 +15,7 @@ export type Text = { pt: string; en: string }
 /** URL da aplicação web do Google Apps Script (ver README).
  *  Enquanto estiver vazio, o inquérito funciona em MODO DEMONSTRAÇÃO
  *  e as respostas não são enviadas. */
-export const ENDPOINT_URL = ''
+export const ENDPOINT_URL = 'https://script.google.com/macros/s/AKfycbyqCV4zEqRbD4G1xQiy8aJyV4xaCKhbVUXAEzzzKa6D3UPYk1VDFIBIlgJGs_SxwBNR/exec'
 
 /** Muda este valor quando abrires uma nova edição do inquérito
  *  (ex.: '2027'). Fica gravado em cada resposta. */
