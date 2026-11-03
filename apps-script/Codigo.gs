@@ -188,19 +188,35 @@ function onOpen() {
     .addItem('Atualizar automaticamente (de hora a hora)', 'ativarAtualizacaoAutomatica')
     .addSeparator()
     .addItem('Apagar respostas de teste', 'apagarRespostasTeste')
+    .addItem('Apagar TODAS as respostas (recomeçar do zero)', 'apagarTodasRespostas')
     .addToUi()
 }
 
-/** Ao mudar um filtro no Painel, os painéis são recalculados. */
+/** Ao mudar um filtro no Painel, ou ao editar/limpar dados à mão, os painéis são recalculados. */
 function onEdit(e) {
   if (!e) return
   const sh = e.range.getSheet()
-  if (sh.getName() === SHEET_PAINEL && e.range.getRow() === LINHA_FILTROS) desenharPaineis_(e.source)
+  const nome = sh.getName()
+  if ((nome === SHEET_PAINEL && e.range.getRow() === LINHA_FILTROS) || nome === SHEET_RESPOSTAS || nome === SHEET_PROFESSORES) {
+    desenharPaineis_(e.source)
+  }
+}
+
+/** Acionador "ao alterar": apagar linhas ou separadores à mão não dispara o onEdit. */
+function aoAlterarFolha(e) {
+  if (e && ['REMOVE_ROW', 'REMOVE_GRID'].indexOf(e.changeType) === -1) return
+  desenharPaineis_(SpreadsheetApp.getActiveSpreadsheet())
+}
+
+function garantirAcionadorAlteracoes_() {
+  const existe = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'aoAlterarFolha' })
+  if (!existe) ScriptApp.newTrigger('aoAlterarFolha').forSpreadsheet(SpreadsheetApp.getActive()).onChange().create()
 }
 
 function atualizarPainel() {
   const ss = SpreadsheetApp.getActiveSpreadsheet()
   atualizarPaineis_(ss)
+  try { garantirAcionadorAlteracoes_() } catch (err) { console.error('Acionador não criado: ' + err) }
   ss.toast('Painel atualizado.', 'Inquérito')
 }
 
@@ -213,6 +229,7 @@ function atualizarPaineis_(ss) {
 function ativarAtualizacaoAutomatica() {
   const existe = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'atualizarPainel' })
   if (!existe) ScriptApp.newTrigger('atualizarPainel').timeBased().everyHours(1).create()
+  garantirAcionadorAlteracoes_()
   SpreadsheetApp.getActiveSpreadsheet().toast('O painel passa a atualizar-se de hora a hora.', 'Inquérito')
 }
 
@@ -248,17 +265,37 @@ function apagarRespostasTeste() {
   ss.toast(total + ' linhas de teste apagadas.', 'Inquérito')
 }
 
+/** Apaga as folhas Respostas e Professores por completo (voltam a ser criadas,
+ *  com os cabeçalhos atuais, na próxima resposta). Usar antes de abrir aos pais. */
+function apagarTodasRespostas() {
+  const ui = SpreadsheetApp.getUi()
+  const ss = SpreadsheetApp.getActiveSpreadsheet()
+  const ok = ui.alert('Apagar TODAS as respostas',
+    'Vão ser apagadas TODAS as respostas e avaliações de professores (separadores Respostas e Professores). Isto não se pode desfazer. Usar só para limpar os testes antes de abrir o inquérito aos pais. Continuar?',
+    ui.ButtonSet.YES_NO)
+  if (ok !== ui.Button.YES) return
+  ;[SHEET_RESPOSTAS, SHEET_PROFESSORES].forEach(function (n) {
+    const sh = ss.getSheetByName(n)
+    if (sh) ss.deleteSheet(sh)
+  })
+  atualizarPainel()
+  ss.toast('Todas as respostas foram apagadas.', 'Inquérito')
+}
+
 function desenharPaineis_(ss) {
   const painel = ss.getSheetByName(SHEET_PAINEL) || ss.insertSheet(SHEET_PAINEL, 0)
   const filtros = lerFiltros_(painel)
   const passa = passaFiltros_(filtros)
   const todas = lerRegistos_(ss, SHEET_RESPOSTAS)
+  // avaliações de professores cuja resposta foi apagada da folha Respostas não contam
+  const ids = {}
+  todas.forEach(function (r) { ids[r.id_resposta] = true })
   const ctx = {
     tz: ss.getSpreadsheetTimeZone(),
     filtros: filtros,
     todas: todas,
     respostas: todas.filter(passa),
-    professores: lerRegistos_(ss, SHEET_PROFESSORES).filter(passa),
+    professores: lerRegistos_(ss, SHEET_PROFESSORES).filter(function (p) { return ids[p.id_resposta] }).filter(passa),
   }
   desenharPainel_(painel, ctx)
   desenharPainelProf_(ss.getSheetByName(SHEET_PAINEL_PROF) || ss.insertSheet(SHEET_PAINEL_PROF, 1), ctx)

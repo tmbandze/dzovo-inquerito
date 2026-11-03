@@ -75,6 +75,12 @@ O mesmo `Codigo.gs` cria um menu **Inquérito** na Google Sheet (aparece ao abri
   comparação entre recintos e currículos; melhorias pedidas; quem respondeu; comentários) e o
   separador **Painel Professores** (confidencial). Também arruma o aspeto das folhas de respostas.
 - **Atualizar automaticamente (de hora a hora)**: liga a atualização automática.
+- **Apagar respostas de teste**: apaga as linhas com `TESTE` na coluna `edicao`.
+- **Apagar TODAS as respostas (recomeçar do zero)**: apaga os separadores Respostas e Professores
+  (são criados de novo na próxima resposta). Usar só para limpar os testes antes de abrir aos pais.
+
+Se apagares linhas à mão, o Painel redesenha-se sozinho, e as avaliações de professores
+de uma resposta apagada deixam de contar.
 
 Os filtros (recinto, currículo, classe, edição) escolhem-se no topo do Painel. Para apresentar,
 **Ficheiro → Transferir → PDF**, escolhendo "Folha atual". O painel não mostra dados de contacto.
