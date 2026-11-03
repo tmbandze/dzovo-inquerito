@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "qr": "node scripts/gerar-qr.mjs"
+    "qr": "node scripts/gerar-qr.mjs",
+    "cartaz": "node scripts/gerar-cartaz.mjs"
   },
   "dependencies": {
     "react": "^19.0.0",

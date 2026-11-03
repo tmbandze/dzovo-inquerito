@@ -109,6 +109,14 @@ npm run qr -- https://UTILIZADOR.github.io/dzovo-inquerito/
 
 Cria `qr-inquerito.png` (alta resolução, para circulares e cartazes) e `qr-inquerito.svg`.
 
+### Cartaz para o WhatsApp
+
+```bash
+npm run cartaz
+```
+
+Cria `cartaz-inquerito.png` (1620×2025), com o código QR e o link. Os textos estão em `scripts/gerar-cartaz.mjs`.
+
 ## 5. Antes de abrir aos pais
 
 - [ ] Perguntas finais aprovadas pelo Conselho (editar `src/config/survey.ts`)
