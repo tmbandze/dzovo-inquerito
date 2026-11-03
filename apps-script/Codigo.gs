@@ -586,7 +586,7 @@ function linhaContagem_(g, rotulo, n, total, cor) {
   const pct = total ? n / total : 0
   const r = g.linha({ 2: rotulo, 3: n, 4: barra_(pct, 1, cor || COR.azul), 7: pct }, 26)
   g.unir(a1_(r, 4, 6))
-  g.estilo('linha', a1_(r, 2, 8)).estilo('centro', a1_(r, 3)).estilo('pct', a1_(r, 7))
+  g.estilo('linha', a1_(r, 2, 8)).estilo('inteiro', a1_(r, 3)).estilo('pct', a1_(r, 7))
 }
 
 function atualizadoEm_(ctx) {
