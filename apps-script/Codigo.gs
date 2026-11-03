@@ -166,6 +166,9 @@ const TEXTOS_ABERTOS = {
   melhoria_outro: 'Outra melhoria',
 }
 const TEMPOS = ['Menos de 1 ano', '1–2 anos', '3–4 anos', '5 anos ou mais']
+/** Ordem das classes nas listas (Kinder primeiro). */
+const CLASSES = ['Kinder Preparatório', 'Kinder', '1.ª classe', '2.ª classe', '3.ª classe', '4.ª classe', '5.ª classe', '6.ª classe']
+const ORDEM = { tempo_na_escola: TEMPOS, classe: CLASSES }
 
 const FILTROS = [
   { coluna: 'recinto', nome: 'Recinto' },
@@ -198,14 +201,31 @@ function onEdit(e) {
   const sh = e.range.getSheet()
   const nome = sh.getName()
   if ((nome === SHEET_PAINEL && e.range.getRow() === LINHA_FILTROS) || nome === SHEET_RESPOSTAS || nome === SHEET_PROFESSORES) {
-    desenharPaineis_(e.source)
+    redesenhar_(e.source)
   }
 }
 
 /** Acionador "ao alterar": apagar linhas ou separadores à mão não dispara o onEdit. */
 function aoAlterarFolha(e) {
-  if (e && ['REMOVE_ROW', 'REMOVE_GRID'].indexOf(e.changeType) === -1) return
-  desenharPaineis_(SpreadsheetApp.getActiveSpreadsheet())
+  if (!e || ['REMOVE_ROW', 'REMOVE_GRID'].indexOf(e.changeType) === -1) return
+  const ss = e.source || SpreadsheetApp.getActiveSpreadsheet()
+  // linhas apagadas nos próprios painéis (ao redesenhar) não contam
+  if (e.changeType === 'REMOVE_ROW') {
+    const ativa = ss.getActiveSheet().getName()
+    if (ativa === SHEET_PAINEL || ativa === SHEET_PAINEL_PROF) return
+  }
+  redesenhar_(ss)
+}
+
+/** Redesenha com o mesmo cadeado do doPost, para dois desenhos não se misturarem. */
+function redesenhar_(ss) {
+  const lock = LockService.getScriptLock()
+  if (!lock.tryLock(20000)) return
+  try {
+    desenharPaineis_(ss)
+  } finally {
+    lock.releaseLock()
+  }
 }
 
 function garantirAcionadorAlteracoes_() {
@@ -215,7 +235,13 @@ function garantirAcionadorAlteracoes_() {
 
 function atualizarPainel() {
   const ss = SpreadsheetApp.getActiveSpreadsheet()
-  atualizarPaineis_(ss)
+  const lock = LockService.getScriptLock()
+  lock.waitLock(30000)
+  try {
+    atualizarPaineis_(ss)
+  } finally {
+    lock.releaseLock()
+  }
   try { garantirAcionadorAlteracoes_() } catch (err) { console.error('Acionador não criado: ' + err) }
   ss.toast('Painel atualizado.', 'Inquérito')
 }
@@ -284,9 +310,13 @@ function apagarTodasRespostas() {
 
 function desenharPaineis_(ss) {
   const painel = ss.getSheetByName(SHEET_PAINEL) || ss.insertSheet(SHEET_PAINEL, 0)
-  const filtros = lerFiltros_(painel)
-  const passa = passaFiltros_(filtros)
   const todas = lerRegistos_(ss, SHEET_RESPOSTAS)
+  const filtros = lerFiltros_(painel)
+  // um filtro que já não existe nos dados (ex.: respostas apagadas) volta a "Todos"
+  FILTROS.forEach(function (d) {
+    if (filtros[d.coluna] !== TODOS && distintos_(todas, d.coluna).indexOf(filtros[d.coluna]) === -1) filtros[d.coluna] = TODOS
+  })
+  const passa = passaFiltros_(filtros)
   // avaliações de professores cuja resposta foi apagada da folha Respostas não contam
   const ids = {}
   todas.forEach(function (r) { ids[r.id_resposta] = true })
@@ -338,13 +368,18 @@ function descreverFiltros_(f) {
 }
 
 function distintos_(registos, campo, ordem) {
+  ordem = ordem || ORDEM[campo]
   const v = []
   registos.forEach(function (r) {
     const x = String(r[campo])
     if (x !== '' && v.indexOf(x) === -1) v.push(x)
   })
   return v.sort(function (a, b) {
-    return ordem ? ordem.indexOf(a) - ordem.indexOf(b) : a.localeCompare(b, 'pt', { numeric: true })
+    if (ordem && (ordem.indexOf(a) !== -1 || ordem.indexOf(b) !== -1)) {
+      const ia = ordem.indexOf(a), ib = ordem.indexOf(b)
+      return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib)
+    }
+    return a.localeCompare(b, 'pt', { numeric: true })
   })
 }
 
@@ -722,7 +757,7 @@ function desenharPainel_(sh, ctx) {
   cabecalho_(g, { 3: 'RESPOSTAS', 7: '%' }, 8, 3)
   ;[['recinto', 'Recinto'], ['curriculo', 'Currículo'], ['classe', 'Classe'], ['tempo_na_escola', 'Tempo na escola']].forEach(function (d) {
     g.estilo('subsecao', a1_(g.linha({ 2: d[1] }, 26), 2))
-    distintos_(R, d[0], d[0] === 'tempo_na_escola' ? TEMPOS : null).forEach(function (v) {
+    distintos_(R, d[0]).forEach(function (v) {
       linhaContagem_(g, v, R.filter(function (r) { return String(r[d[0]]) === v }).length, R.length)
     })
   })
