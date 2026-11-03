@@ -22,73 +22,90 @@ export const ENDPOINT_URL = 'https://script.google.com/macros/s/AKfycbyqCV4zEqRb
 export const EDICAO = '2026-T4'
 
 // ---------------------------------------------------------------------
-// Recintos, currículos e classes
+// Recintos, classes e currículos
 // ---------------------------------------------------------------------
+// O encarregado escolhe só a CLASSE: o recinto sai daí.
+// Depois escolhe o currículo que o educando segue (PROGRAMS).
 
 export type CampusId = 'dzovo1' | 'dzovo2'
 export type CurriculumId = 'nacional' | 'cambridge'
 
 export const CAMPUSES: { id: CampusId; name: string; detail: Text }[] = [
-  // TODO: substituir pelos bairros/moradas reais
-  { id: 'dzovo1', name: 'Dzovo 1', detail: { pt: 'Bairro / morada a confirmar', en: 'Address to be confirmed' } },
-  { id: 'dzovo2', name: 'Dzovo 2', detail: { pt: 'Bairro / morada a confirmar', en: 'Address to be confirmed' } },
+  { id: 'dzovo1', name: 'Dzovo 1', detail: { pt: 'Kinder à 3.ª classe', en: 'Kindergarten to Grade 3' } },
+  { id: 'dzovo2', name: 'Dzovo 2', detail: { pt: '4.ª à 6.ª classe', en: 'Grades 4 to 6' } },
 ]
 
-export const CURRICULA: { id: CurriculumId; name: Text; detail: Text }[] = [
-  { id: 'nacional', name: { pt: 'Currículo Nacional', en: 'National Curriculum' }, detail: { pt: 'Programa moçambicano', en: 'Mozambican programme' } },
-  { id: 'cambridge', name: { pt: 'Currículo Cambridge', en: 'Cambridge Curriculum' }, detail: { pt: 'Cambridge Primary', en: 'Cambridge Primary' } },
+/** O que o encarregado escolhe. "curricula" diz que professores aparecem. */
+export type ProgramId = 'bilingue' | 'cambridge' | 'nacional'
+export const PROGRAMS: { id: ProgramId; name: Text; detail: Text; curricula: CurriculumId[] }[] = [
+  { id: 'bilingue', name: { pt: 'Bilingue', en: 'Bilingual' }, detail: { pt: 'Currículo Nacional e Cambridge', en: 'National and Cambridge curricula' }, curricula: ['nacional', 'cambridge'] },
+  { id: 'cambridge', name: { pt: 'Full Cambridge', en: 'Full Cambridge' }, detail: { pt: 'Só o currículo Cambridge', en: 'Cambridge curriculum only' }, curricula: ['cambridge'] },
+  { id: 'nacional', name: { pt: 'Nacional', en: 'National' }, detail: { pt: 'Só o currículo nacional', en: 'National curriculum only' }, curricula: ['nacional'] },
 ]
 
-/** Classes disponíveis em cada currículo (confirmar com a Direção). */
-export const GRADES: Record<CurriculumId, string[]> = {
-  nacional: ['1.ª classe', '2.ª classe', '3.ª classe', '4.ª classe', '5.ª classe', '6.ª classe', '7.ª classe'],
-  cambridge: ['Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5', 'Grade 6', 'Grade 7'],
-}
+/** programs: opções de currículo nessa classe. Lista vazia = a pergunta não aparece
+ *  (o encarregado vê todos os professores da classe). */
+export type Grade = { id: string; name: Text; campus: CampusId; programs: ProgramId[] }
 
-/** Se um recinto não tiver algum currículo, retira-o daqui. */
-export const CURRICULA_BY_CAMPUS: Record<CampusId, CurriculumId[]> = {
-  dzovo1: ['nacional', 'cambridge'],
-  dzovo2: ['nacional', 'cambridge'],
-}
+const TODOS_CURRICULOS: ProgramId[] = ['bilingue', 'cambridge', 'nacional']
+
+export const GRADES: Grade[] = [
+  { id: 'kinder_prep', name: { pt: 'Kinder Preparatório', en: 'Kinder Preparatory' }, campus: 'dzovo1', programs: TODOS_CURRICULOS },
+  { id: 'kinder', name: { pt: 'Kinder', en: 'Kinder' }, campus: 'dzovo1', programs: TODOS_CURRICULOS },
+  { id: '1', name: { pt: '1.ª classe', en: 'Grade 1' }, campus: 'dzovo1', programs: TODOS_CURRICULOS },
+  { id: '2', name: { pt: '2.ª classe', en: 'Grade 2' }, campus: 'dzovo1', programs: TODOS_CURRICULOS },
+  { id: '3', name: { pt: '3.ª classe', en: 'Grade 3' }, campus: 'dzovo1', programs: TODOS_CURRICULOS },
+  { id: '4', name: { pt: '4.ª classe', en: 'Grade 4' }, campus: 'dzovo2', programs: TODOS_CURRICULOS },
+  { id: '5', name: { pt: '5.ª classe', en: 'Grade 5' }, campus: 'dzovo2', programs: TODOS_CURRICULOS },
+  { id: '6', name: { pt: '6.ª classe', en: 'Grade 6' }, campus: 'dzovo2', programs: TODOS_CURRICULOS },
+]
 
 // ---------------------------------------------------------------------
 // Professores
 // ---------------------------------------------------------------------
-// Uma linha por professor e por turma. "grades" aceita uma ou várias classes.
-// Exemplo real: { campus: 'dzovo2', curriculum: 'cambridge', grades: ['Grade 4', 'Grade 5'], name: 'Nome Apelido', subject: { pt: 'Matemática', en: 'Mathematics' } }
+// Cada encarregado só avalia os professores que dão aulas ao seu educando:
+//   • grades    → classes onde o professor dá aulas (ids de GRADES)
+//   • curricula → ['nacional']  aparece a quem faz Bilingue ou Nacional;
+//                 ['cambridge'] aparece a quem faz Bilingue ou Full Cambridge;
+//                 OS_DOIS       aparece a todos dessa classe.
+// Os nomes ficam gravados na Google Sheet: não os mudar depois de o inquérito abrir.
 
 export type Teacher = {
-  campus: CampusId
-  curriculum: CurriculumId
-  grades: string[]
   name: string
   subject: Text
+  grades: string[]
+  curricula: CurriculumId[]
 }
 
-const titular: Text = { pt: 'Professor(a) titular', en: 'Class teacher' }
-const ingles: Text = { pt: 'Inglês', en: 'English' }
-const computing: Text = { pt: 'Computing', en: 'Computing' }
-const musica: Text = { pt: 'Música', en: 'Music' }
+const OS_DOIS: CurriculumId[] = ['nacional', 'cambridge']
 
-// TODO: SUBSTITUIR TODA ESTA LISTA PELOS PROFESSORES REAIS
-function exemplos(): Teacher[] {
-  const list: Teacher[] = []
-  let n = 1
-  for (const campus of ['dzovo1', 'dzovo2'] as CampusId[]) {
-    for (const grade of GRADES.nacional) {
-      list.push({ campus, curriculum: 'nacional', grades: [grade], name: `Professor(a) Exemplo ${n++}`, subject: titular })
-    }
-    list.push({ campus, curriculum: 'nacional', grades: GRADES.nacional, name: `Professor(a) Exemplo ${n++}`, subject: ingles })
-    for (const grade of GRADES.cambridge) {
-      list.push({ campus, curriculum: 'cambridge', grades: [grade], name: `Professor(a) Exemplo ${n++}`, subject: titular })
-    }
-    list.push({ campus, curriculum: 'cambridge', grades: GRADES.cambridge, name: `Professor(a) Exemplo ${n++}`, subject: computing })
-    list.push({ campus, curriculum: 'cambridge', grades: GRADES.cambridge, name: `Professor(a) Exemplo ${n++}`, subject: musica })
-  }
-  return list
-}
+const educador: Text = { pt: 'Educador(a) do Kinder', en: 'Kinder teacher' }
+const titularNacional: Text = { pt: 'Titular · Currículo Nacional', en: 'Class teacher · National Curriculum' }
+const titularCambridge: Text = { pt: 'Titular · Cambridge', en: 'Class teacher · Cambridge' }
+const titularAmbos: Text = { pt: 'Titular · Nacional e Cambridge', en: 'Class teacher · National and Cambridge' }
 
-export const TEACHERS: Teacher[] = exemplos()
+export const TEACHERS: Teacher[] = [
+  // Dzovo 1 — Kinder à 3.ª classe
+  { name: 'Generosa Boavida Guenha', subject: educador, grades: ['kinder_prep'], curricula: OS_DOIS },
+  { name: 'Ilda', subject: educador, grades: ['kinder'], curricula: OS_DOIS },
+  { name: 'Maria Perfeita', subject: titularNacional, grades: ['1'], curricula: ['nacional'] },
+  { name: 'Judith Queluba Mabunda', subject: titularCambridge, grades: ['1'], curricula: ['cambridge'] },
+  { name: 'Mary', subject: { pt: 'Professora · Cambridge', en: 'Teacher · Cambridge' }, grades: ['1'], curricula: ['cambridge'] },
+  { name: 'Natália Nuvunga', subject: titularNacional, grades: ['2'], curricula: ['nacional'] },
+  { name: 'Ogochukwu Cynthia Okoye', subject: titularCambridge, grades: ['2'], curricula: ['cambridge'] },
+  { name: 'Margarethy Abdala', subject: titularNacional, grades: ['3'], curricula: ['nacional'] },
+  { name: 'Delma Fadzai Takavendesa', subject: titularCambridge, grades: ['3'], curricula: ['cambridge'] },
+
+  // Dzovo 2 — 4.ª à 6.ª classe (a 4.ª tem um só professor para os dois currículos)
+  { name: 'Fernando Augusto Nuvunga', subject: titularAmbos, grades: ['4'], curricula: OS_DOIS },
+  { name: 'Selma João Chume', subject: titularNacional, grades: ['5', '6'], curricula: ['nacional'] },
+  { name: 'Geraldo Tarafa Murima', subject: titularCambridge, grades: ['5', '6'], curricula: ['cambridge'] },
+
+  // Disciplinas (aparecem a todos os alunos dessas classes)
+  { name: 'Anastácia', subject: { pt: 'Francês', en: 'French' }, grades: ['2', '3', '4', '5', '6'], curricula: OS_DOIS },
+  { name: 'Tomás Mathe', subject: { pt: 'Computer Science', en: 'Computer Science' }, grades: ['4', '5', '6'], curricula: OS_DOIS },
+  { name: 'Tomás Mathe', subject: { pt: 'História', en: 'History' }, grades: ['4', '5'], curricula: OS_DOIS },
+]
 
 // ---------------------------------------------------------------------
 // Perguntas
@@ -102,6 +119,8 @@ export type Question = {
   type: 'scale' | 'text'
   text: Text
   required?: boolean
+  /** Só para 'text': texto de ajuda dentro da caixa */
+  placeholder?: Text
 }
 
 export type RatingSection = {
@@ -139,15 +158,25 @@ export const DIRECAO: RatingSection = {
   id: 'dir',
   eyebrow: { pt: 'Liderança', en: 'Leadership' },
   title: { pt: 'Direção da escola', en: 'School leadership' },
-  subtitle: { pt: 'Na pessoa do Diretor da escola. Até que ponto concorda?', en: 'Thinking of the Head of School. How satisfied are you?' },
+  subtitle: {
+    pt: 'Na pessoa do Diretor da escola. São poucas perguntas: queremos sobretudo ouvir a sua opinião, escrita por si.',
+    en: 'Thinking of the Head of School. Just a few questions: above all, we want to hear your opinion in your own words.',
+  },
   questions: [
-    { id: 'acessivel', type: 'scale', required: true, text: { pt: 'O Diretor é acessível quando preciso de falar com ele', en: 'The Head is accessible when I need to talk to him' } },
-    { id: 'ouvido', type: 'scale', required: true, text: { pt: 'As minhas preocupações são ouvidas com atenção e respeito', en: 'My concerns are listened to with attention and respect' } },
+    { id: 'acessivel', type: 'scale', required: true, text: { pt: 'O Diretor é acessível e ouve as minhas preocupações', en: 'The Head is approachable and listens to my concerns' } },
     { id: 'resolve', type: 'scale', required: true, text: { pt: 'Os problemas apresentados à Direção são resolvidos em tempo útil', en: 'Problems raised with the leadership are resolved in good time' } },
     { id: 'decisoes', type: 'scale', required: true, text: { pt: 'As decisões importantes são comunicadas aos pais com clareza', en: 'Important decisions are communicated clearly to parents' } },
-    { id: 'confianca', type: 'scale', required: true, text: { pt: 'Confio na liderança e no rumo que a escola está a seguir', en: "I trust the leadership and the school's direction" } },
     { id: 'dir_geral', type: 'scale', required: true, text: { pt: 'Satisfação geral com a Direção', en: 'Overall satisfaction with the leadership' } },
-    { id: 'dir_comentario', type: 'text', text: { pt: 'Há algo que gostaria de dizer diretamente à Direção? (opcional)', en: 'Is there anything you would like to tell the leadership directly? (optional)' } },
+    {
+      id: 'dir_bem', type: 'text',
+      text: { pt: 'Na sua opinião, o que a Direção está a fazer bem?', en: 'In your opinion, what is the leadership doing well?' },
+      placeholder: { pt: 'Escreva à vontade, com as suas palavras…', en: 'Write freely, in your own words…' },
+    },
+    {
+      id: 'dir_mudar', type: 'text',
+      text: { pt: 'O que gostaria que a Direção mudasse ou melhorasse?', en: 'What would you like the leadership to change or improve?' },
+      placeholder: { pt: 'Todas as opiniões são lidas pela Direção…', en: 'Every opinion is read by the leadership…' },
+    },
   ],
 }
 
@@ -163,7 +192,7 @@ export const ADMINISTRACAO: RatingSection = {
     { id: 'documentos', type: 'scale', required: true, text: { pt: 'Facilidade em obter documentos (declarações, recibos, boletins)', en: 'Ease of getting documents (letters, receipts, reports)' } },
     { id: 'contacto', type: 'scale', required: true, text: { pt: 'Facilidade de contacto (telefone, WhatsApp, presencial)', en: 'Ease of contact (phone, WhatsApp, in person)' } },
     { id: 'adm_geral', type: 'scale', required: true, text: { pt: 'Satisfação geral com a Administração', en: 'Overall satisfaction with the administration' } },
-    { id: 'adm_comentario', type: 'text', text: { pt: 'Comentário sobre a Administração (opcional)', en: 'Comment on the administration (optional)' } },
+    { id: 'adm_comentario', type: 'text', text: { pt: 'Comentário sobre a Administração', en: 'Comment on the administration' } },
   ],
 }
 

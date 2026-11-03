@@ -1,7 +1,7 @@
 import {
-  ADMINISTRACAO, CAMPUSES, CURRICULA, DIRECAO, DURATION_OPTIONS, EDICAO, ENDPOINT_URL,
-  IMPROVEMENT_OPTIONS, ORGANIZACAO, TEACHERS, TEACHER_QUESTIONS,
-  type CampusId, type CurriculumId, type RatingSection, type Teacher,
+  ADMINISTRACAO, CAMPUSES, DIRECAO, DURATION_OPTIONS, EDICAO, ENDPOINT_URL, GRADES,
+  IMPROVEMENT_OPTIONS, ORGANIZACAO, PROGRAMS, TEACHERS, TEACHER_QUESTIONS,
+  type CurriculumId, type ProgramId, type RatingSection, type Teacher,
 } from './config/survey'
 import type { Lang } from './i18n'
 
@@ -11,9 +11,10 @@ export type Rating = number | 'NS'
 export type TeacherAnswer = { ratings: Record<string, Rating>; comment: string }
 
 export type Answers = {
-  campus?: CampusId
-  curriculum?: CurriculumId
+  /** id da classe (GRADES) */
   grade?: string
+  /** currículo que o educando segue (PROGRAMS); só nas classes com escolha */
+  program?: ProgramId
   duration?: number
   /** chave: `${secção}.${pergunta}` */
   ratings: Record<string, Rating>
@@ -36,17 +37,35 @@ export const emptyAnswers = (): Answers => ({
 
 export const RATING_SECTIONS: RatingSection[] = [ORGANIZACAO, DIRECAO, ADMINISTRACAO]
 
-export const teacherKey = (t: Teacher) => `${t.campus}|${t.curriculum}|${t.name}|${t.subject.pt}`
+export const teacherKey = (t: Teacher) => `${t.name}|${t.subject.pt}`
 
+export const gradeOf = (a: Answers) => GRADES.find((g) => g.id === a.grade)
+export const campusOf = (a: Answers) => CAMPUSES.find((c) => c.id === gradeOf(a)?.campus)
+/** Currículo escolhido, só se for válido para a classe. */
+export const programOf = (a: Answers) => {
+  const g = gradeOf(a)
+  return g?.programs.includes(a.program!) ? PROGRAMS.find((p) => p.id === a.program) : undefined
+}
+/** A classe pede a escolha do currículo? */
+export const needsProgram = (a: Answers) => (gradeOf(a)?.programs.length ?? 0) > 1
+
+/** Só os professores que dão aulas ao educando (classe + currículo). */
 export function teachersFor(a: Answers): Teacher[] {
-  if (!a.campus || !a.curriculum || !a.grade) return []
-  return TEACHERS.filter((t) => t.campus === a.campus && t.curriculum === a.curriculum && t.grades.includes(a.grade!))
+  const g = gradeOf(a)
+  if (!g) return []
+  let curricula: CurriculumId[] = ['nacional', 'cambridge']
+  if (g.programs.length) {
+    const p = PROGRAMS.find((x) => x.id === (g.programs.length === 1 ? g.programs[0] : a.program))
+    if (!p) return []
+    curricula = p.curricula
+  }
+  return TEACHERS.filter((t) => t.grades.includes(g.id) && t.curricula.some((c) => curricula.includes(c)))
 }
 
 // ---------------------------------------------------------------------
 // Rascunho guardado no telemóvel (para quem é interrompido a meio)
 // ---------------------------------------------------------------------
-const DRAFT_KEY = `dzovo-inquerito-${EDICAO}`
+const DRAFT_KEY = `dzovo-inquerito-${EDICAO}-v2`
 const LANG_KEY = 'dzovo-inquerito-lang'
 
 export type Draft = { answers: Answers; screen: number; savedAt: number }
@@ -98,8 +117,11 @@ function uid() {
 /** Constrói o registo no formato das colunas da folha (sempre em português). */
 export function buildPayload(a: Answers, lang: Lang) {
   const id = uid()
-  const campus = CAMPUSES.find((c) => c.id === a.campus)?.name ?? ''
-  const curriculum = CURRICULA.find((c) => c.id === a.curriculum)?.name.pt ?? ''
+  const campus = campusOf(a)?.name ?? ''
+  const grade = gradeOf(a)
+  const g = grade?.programs.length === 1 ? { ...a, program: grade.programs[0] } : a
+  const curriculum = programOf(g)?.name.pt ?? ''
+  const classe = grade?.name.pt ?? ''
 
   const resposta: Record<string, string | number> = {
     id_resposta: id,
@@ -107,7 +129,7 @@ export function buildPayload(a: Answers, lang: Lang) {
     idioma: lang.toUpperCase(),
     recinto: campus,
     curriculo: curriculum,
-    classe: a.grade ?? '',
+    classe,
     tempo_na_escola: a.duration !== undefined ? DURATION_OPTIONS[a.duration].pt : '',
   }
 
@@ -138,7 +160,7 @@ export function buildPayload(a: Answers, lang: Lang) {
       edicao: EDICAO,
       recinto: campus,
       curriculo: curriculum,
-      classe: a.grade ?? '',
+      classe,
       professor: t.name,
       disciplina: t.subject.pt,
     }

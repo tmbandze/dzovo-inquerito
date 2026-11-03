@@ -29,9 +29,8 @@ export const ui = {
   idEyebrow: { pt: 'Vamos começar', en: "Let's begin" },
   idTitle: { pt: 'Sobre o seu educando', en: 'About your child' },
   idSubtitle: { pt: 'Estas informações ajudam-nos a mostrar as perguntas certas. Não identificam a sua família.', en: 'This helps us show the right questions. It does not identify your family.' },
-  qCampus: { pt: 'Em que recinto estuda o seu educando?', en: 'Which campus does your child attend?' },
-  qCurriculum: { pt: 'Currículo', en: 'Curriculum' },
-  qGrade: { pt: 'Classe do educando', en: "Child's class" },
+  qGrade: { pt: 'Em que classe está o seu educando?', en: 'Which class is your child in?' },
+  qProgram: { pt: 'Que currículo segue o seu educando?', en: 'Which curriculum does your child follow?' },
   qDuration: { pt: 'Há quanto tempo frequenta o Colégio Dzovo?', en: 'How long has your child attended Colégio Dzovo?' },
 
   veryUnsat: { pt: 'Muito insatisfeito', en: 'Very dissatisfied' },
@@ -44,7 +43,7 @@ export const ui = {
 
   tEyebrow: { pt: 'Relação com os professores', en: 'Relationship with teachers' },
   tTitle: { pt: 'Os professores do seu educando', en: "Your child's teachers" },
-  tSubtitle: { pt: 'Avalie cada professor. Toque no nome para abrir.', en: 'Rate each teacher. Tap a name to open.' },
+  tSubtitle: { pt: 'Aparecem só os professores que dão aulas ao seu educando. Toque no nome para abrir.', en: 'Only the teachers who teach your child are shown. Tap a name to open.' },
   tNone: { pt: 'Ainda não há professores registados para esta turma. Pode avançar.', en: 'No teachers are registered for this class yet. You can continue.' },
   tComment: { pt: 'Comentário sobre este professor', en: 'Comment on this teacher' },
   tProgress: { pt: 'respondidas', en: 'answered' },

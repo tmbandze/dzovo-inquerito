@@ -130,11 +130,9 @@ const AREAS = [
     org_org_geral: 'Satisfação geral',
   } },
   { nome: 'Direção', curto: 'Direção', colunas: {
-    dir_acessivel: 'Diretor acessível',
-    dir_ouvido: 'Preocupações ouvidas',
+    dir_acessivel: 'Diretor acessível e ouve',
     dir_resolve: 'Resolução de problemas',
     dir_decisoes: 'Comunicação das decisões',
-    dir_confianca: 'Confiança na liderança',
     dir_dir_geral: 'Satisfação geral',
   } },
   { nome: 'Administração / Secretaria', curto: 'Administração', colunas: {
@@ -162,7 +160,8 @@ const TEXTOS_ABERTOS = {
   o_que_mais_gosta: 'O que mais gosta',
   como_melhorar: 'Como melhorar',
   comentarios_gerais: 'Comentário geral',
-  dir_dir_comentario: 'Para a Direção',
+  dir_dir_bem: 'Direção: o que faz bem',
+  dir_dir_mudar: 'Direção: o que mudar',
   adm_adm_comentario: 'Sobre a Administração',
   melhoria_outro: 'Outra melhoria',
 }
@@ -746,10 +745,12 @@ function desenharPainelProf_(sh, ctx) {
 
   const grupos = {}
   P.forEach(function (p) {
-    const k = [p.recinto, p.curriculo, p.professor, p.disciplina].join('|')
-    if (!grupos[k]) grupos[k] = { p: p, regs: [], classes: [] }
+    // um professor = uma linha, mesmo que dê aulas em várias classes (ex.: Francês)
+    const k = [p.professor, p.disciplina].join('|')
+    if (!grupos[k]) grupos[k] = { p: p, regs: [], classes: [], recintos: [] }
     grupos[k].regs.push(p)
     if (grupos[k].classes.indexOf(String(p.classe)) === -1) grupos[k].classes.push(String(p.classe))
+    if (grupos[k].recintos.indexOf(String(p.recinto)) === -1) grupos[k].recintos.push(String(p.recinto))
   })
   const chaves = Object.keys(grupos).sort(function (a, b) { return a.localeCompare(b, 'pt', { numeric: true }) })
 
@@ -765,8 +766,9 @@ function desenharPainelProf_(sh, ctx) {
 
     chaves.forEach(function (k) {
       const gr = grupos[k], p = gr.p
-      const classes = gr.classes.length > 2 ? gr.classes.length + ' classes' : gr.classes.join(', ')
-      const v = { 2: p.professor, 3: p.disciplina, 4: p.recinto + ' · ' + String(p.curriculo).replace('Currículo ', '') + ' · ' + classes, 5: gr.regs.length }
+      gr.classes.sort(function (a, b) { return a.localeCompare(b, 'pt', { numeric: true }) })
+      const classes = gr.classes.length > 3 ? gr.classes.length + ' classes' : gr.classes.join(', ')
+      const v = { 2: p.professor, 3: p.disciplina, 4: gr.recintos.sort().join(' e ') + ' · ' + classes, 5: gr.regs.length }
       colunas.forEach(function (c, i) { v[6 + i] = estatistica_(gr.regs, [c]).media })
       const geral = estatistica_(gr.regs, ['prof_geral']).media
       v[ultima] = barra_(geral, 5, corNota_(geral))

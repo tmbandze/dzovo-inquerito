@@ -101,6 +101,8 @@ img { display: block; }
 .form-section { margin-top: 30px; scroll-margin-top: 110px; }
 .form-section > h2, .nps-card h2 { margin-bottom: 14px; color: var(--ink); font-family: var(--font-title); font-size: 1.08rem; line-height: 1.45; }
 .choice-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.choice-grid.stack { grid-template-columns: 1fr; }
+.choice-grid.stack .choice-card { min-height: 76px; }
 .choice-card { position: relative; display: flex; align-items: center; gap: 12px; min-height: 92px; padding: 16px; border: 1.5px solid var(--line); border-radius: var(--radius-lg); background: white; box-shadow: 0 3px 12px rgba(28,58,99,.04); text-align: left; cursor: pointer; transition: border .15s, background .15s, transform .15s; }
 @media (hover: hover) { .choice-card:hover:not(.selected) { border-color: #aebdce; } }
 .choice-card.selected { border: 2px solid var(--navy); background: #f7faff; box-shadow: 0 5px 18px rgba(28,58,99,.1); }
@@ -113,6 +115,9 @@ img { display: block; }
 .selected .radio-mark { border-color: var(--navy); }
 .radio-mark span { width: 11px; height: 11px; border-radius: 50%; background: var(--navy); }
 .chip-list { display: flex; flex-wrap: wrap; gap: 9px; }
+.grade-group + .grade-group { margin-top: 16px; }
+.grade-group h3 { display: flex; align-items: center; gap: 6px; margin-bottom: 9px; color: var(--navy); font-size: .9rem; font-weight: 700; }
+.grade-group h3 small { color: var(--muted); font-size: .82rem; font-weight: 400; }
 .chip { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 48px; padding: 0 16px; border: 1px solid #cdd5df; border-radius: 24px; background: white; color: #3d4b5d; font-size: .92rem; font-weight: 600; cursor: pointer; }
 .chip:hover:not(:disabled) { border-color: var(--navy); color: var(--navy); }
 .chip.selected, .chip.selected:hover:not(:disabled) { border-color: var(--navy); background: var(--navy); color: white; }

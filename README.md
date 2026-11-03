@@ -13,7 +13,7 @@ Telemóvel do encarregado ──► Site (GitHub Pages) ──► Apps Script �
 
 | Ficheiro | Para quê |
 |---|---|
-| `src/config/survey.ts` | **O único ficheiro a editar no dia a dia**: perguntas, recintos, classes, professores e o endereço da Google Sheet |
+| `src/config/survey.ts` | **O único ficheiro a editar no dia a dia**: perguntas, classes, currículos, professores e o endereço da Google Sheet |
 | `src/i18n.ts` | Textos da interface em português e inglês |
 | `src/App.tsx`, `src/components.tsx` | Ecrãs e componentes (baseados no design do Figma Make) |
 | `src/state.ts` | Respostas, rascunho no telemóvel, validação e envio |
@@ -23,7 +23,7 @@ Telemóvel do encarregado ──► Site (GitHub Pages) ──► Apps Script �
 ## Funcionalidades
 
 - 7 secções: Identificação · Organização · Direção · Administração · Professores · Melhorias · Comentários finais
-- Escolha de **recinto (Dzovo 1 / Dzovo 2)**, currículo e classe; aparecem só os professores dessa turma
+- O encarregado escolhe a **classe** (o recinto Dzovo 1 / Dzovo 2 sai daí) e o currículo: **Bilingue** (Nacional e Cambridge), **Full Cambridge** ou **Nacional**; aparecem só os professores que dão aulas ao educando
 - Português / Inglês em todo o inquérito
 - Validação: as perguntas obrigatórias ficam destacadas e o ecrã desloca-se até elas
 - Rascunho guardado no telemóvel: se o encarregado sair a meio, pode continuar depois
@@ -106,21 +106,24 @@ Cria `qr-inquerito.png` (alta resolução, para circulares e cartazes) e `qr-inq
 ## 5. Antes de abrir aos pais
 
 - [ ] Perguntas finais aprovadas pelo Conselho (editar `src/config/survey.ts`)
-- [ ] Moradas reais do Dzovo 1 e Dzovo 2 (`CAMPUSES`)
-- [ ] Classes existentes em cada currículo (`GRADES`, `CURRICULA_BY_CAMPUS`)
-- [ ] **Lista real de professores** (`TEACHERS`): substituir a função `exemplos()` por uma lista
+- [ ] Classes e opções de currículo de cada classe (`GRADES`)
+- [ ] **Nomes reais dos professores** (`TEACHERS`)
 - [ ] `ENDPOINT_URL` preenchido e testado com 2 ou 3 respostas de teste (apagar depois na folha)
 - [ ] `EDICAO` atualizado (ex.: `2026-T4`)
 - [ ] Testar em 2 ou 3 telemóveis diferentes, incluindo um Android simples
 
-### Exemplo de lista real de professores
+### Como funciona a lista de professores
+
+Cada professor tem as classes onde dá aulas (`grades`) e o currículo (`curricula`):
 
 ```ts
-export const TEACHERS: Teacher[] = [
-  { campus: 'dzovo1', curriculum: 'nacional',  grades: ['1.ª classe'], name: 'Nome Apelido', subject: { pt: 'Professor(a) titular', en: 'Class teacher' } },
-  { campus: 'dzovo2', curriculum: 'cambridge', grades: ['Grade 4', 'Grade 5'], name: 'Nome Apelido', subject: { pt: 'Matemática', en: 'Mathematics' } },
-]
+{ name: 'Nome Apelido', subject: titularNacional,  grades: ['2'], curricula: ['nacional'] },   // Bilingue e Nacional da 2.ª classe
+{ name: 'Nome Apelido', subject: titularCambridge, grades: ['2'], curricula: ['cambridge'] },  // Bilingue e Full Cambridge da 2.ª classe
+{ name: 'Nome Apelido', subject: { pt: 'Francês', en: 'French' }, grades: TODAS, curricula: OS_DOIS }, // todas as classes
 ```
+
+Exemplo, 2.ª classe: Full Cambridge avalia o titular de Cambridge e o de Francês; Nacional avalia o
+titular de Nacional e o de Francês; Bilingue avalia os dois titulares e o de Francês.
 
 ## Privacidade
 

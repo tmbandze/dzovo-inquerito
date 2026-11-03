@@ -1,16 +1,16 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
-  CAMPUSES, CURRICULA, CURRICULA_BY_CAMPUS, DURATION_OPTIONS, GRADES, IMPROVEMENT_OPTIONS,
-  MAX_IMPROVEMENTS, TEACHER_QUESTIONS, type RatingSection, type Teacher,
+  CAMPUSES, DURATION_OPTIONS, GRADES, IMPROVEMENT_OPTIONS,
+  MAX_IMPROVEMENTS, PROGRAMS, TEACHER_QUESTIONS, type ProgramId, type RatingSection, type Teacher,
 } from './config/survey'
 import { ui, type Lang } from './i18n'
 import {
-  Brand, ChoiceCard, Chip, ErrorBanner, Icon, LangContext, LanguageButton, PageIntro,
+  Brand, ChoiceCard, Chip, ErrorBanner, Icon, LangContext, type IconName, LanguageButton, PageIntro,
   RatingScale, SurveyButton, TextField, useT,
 } from './components'
 import {
-  RATING_SECTIONS, clearDraft, emptyAnswers, loadDraft, loadLang, saveDraft, saveLang,
-  submit, teacherKey, teachersFor, type Answers, type Rating, type SubmitResult,
+  RATING_SECTIONS, campusOf, clearDraft, emptyAnswers, gradeOf, loadDraft, loadLang, needsProgram,
+  programOf, saveDraft, saveLang, submit, teacherKey, teachersFor, type Answers, type Rating, type SubmitResult,
 } from './state'
 
 // Ecrãs: 0 boas-vindas · 1 identificação · 2–4 secções de escala · 5 professores
@@ -26,9 +26,8 @@ type Patch = (fn: (a: Answers) => Answers) => void
 function missingFor(screen: number, a: Answers): string[] {
   const miss: string[] = []
   if (screen === 1) {
-    if (!a.campus) miss.push('f-campus')
-    if (!a.curriculum) miss.push('f-curriculum')
-    if (!a.grade) miss.push('f-grade')
+    if (!gradeOf(a)) miss.push('f-grade')
+    else if (needsProgram(a) && !programOf(a)) miss.push('f-program')
     if (a.duration === undefined) miss.push('f-duration')
   }
   if (screen >= 2 && screen <= 4) {
@@ -129,7 +128,7 @@ export default function App() {
     go(Math.min(Math.max(draft.screen, 1), 7))
   }
 
-  /** Mantém recinto/currículo/classe ao responder por outro educando? Não: começa limpo. */
+  /** Mantém classe/currículo ao responder por outro educando? Não: começa limpo. */
   const another = () => startNew()
 
   let content: ReactNode
@@ -201,14 +200,16 @@ function Actions({
 }
 
 function ContextTag({ answers }: { answers: Answers }) {
-  const campus = CAMPUSES.find((c) => c.id === answers.campus)?.name
   const t = useT()
-  const curriculum = CURRICULA.find((c) => c.id === answers.curriculum)
-  if (!campus || !curriculum) return null
+  const campus = campusOf(answers)
+  const grade = gradeOf(answers)
+  const program = programOf(answers)
+  if (!campus || !grade) return null
   return (
     <div className="context-tag">
       <Icon name="location" size={16} />
-      {campus} <b>·</b> {t(curriculum.name).replace(/^Currículo |Curriculum$/g, '').trim()} <b>·</b> {answers.grade}
+      {campus.name} <b>·</b> {t(grade.name)}
+      {program && <><b>·</b> {t(program.name)}</>}
     </div>
   )
 }
@@ -263,49 +264,37 @@ function FieldGroup({ id, title, missing, children }: { id: string; title: strin
 
 function Identification({ answers, patch, missing }: Ctx) {
   const t = useT()
-  const curricula = answers.campus ? CURRICULA_BY_CAMPUS[answers.campus] : CURRICULA.map((c) => c.id)
-  const grades = answers.curriculum ? GRADES[answers.curriculum] : []
+  const grade = gradeOf(answers)
+  const programs = needsProgram(answers) ? PROGRAMS.filter((p) => grade!.programs.includes(p.id)) : []
   return (
     <>
       <PageIntro eyebrow={t(ui.idEyebrow)} title={t(ui.idTitle)} subtitle={t(ui.idSubtitle)} />
-      <FieldGroup id="f-campus" title={t(ui.qCampus)} missing={missing}>
-        <div className="choice-grid">
-          {CAMPUSES.map((c) => (
-            <ChoiceCard
-              key={c.id}
-              title={c.name}
-              detail={t(c.detail)}
-              icon="location"
-              selected={answers.campus === c.id}
-              onClick={() => patch((a) => {
-                const keep = a.curriculum && CURRICULA_BY_CAMPUS[c.id].includes(a.curriculum)
-                return { ...a, campus: c.id, curriculum: keep ? a.curriculum : undefined, grade: keep ? a.grade : undefined, teachers: {} }
-              })}
-            />
-          ))}
-        </div>
+      <FieldGroup id="f-grade" title={t(ui.qGrade)} missing={missing}>
+        {CAMPUSES.map((c) => (
+          <div className="grade-group" key={c.id}>
+            <h3><Icon name="location" size={15} /> {c.name} <small>{t(c.detail)}</small></h3>
+            <div className="chip-list">
+              {GRADES.filter((g) => g.campus === c.id).map((g) => (
+                <Chip key={g.id} selected={answers.grade === g.id} onClick={() => patch((a) => (a.grade === g.id ? a : { ...a, grade: g.id, teachers: {} }))}>
+                  {t(g.name)}
+                </Chip>
+              ))}
+            </div>
+          </div>
+        ))}
       </FieldGroup>
-      <FieldGroup id="f-curriculum" title={t(ui.qCurriculum)} missing={missing}>
-        <div className="choice-grid">
-          {CURRICULA.filter((c) => curricula.includes(c.id)).map((c) => (
-            <ChoiceCard
-              key={c.id}
-              title={t(c.name)}
-              detail={t(c.detail)}
-              icon={c.id === 'nacional' ? 'school' : 'book'}
-              selected={answers.curriculum === c.id}
-              onClick={() => patch((a) => (a.curriculum === c.id ? a : { ...a, curriculum: c.id, grade: undefined, teachers: {} }))}
-            />
-          ))}
-        </div>
-      </FieldGroup>
-      {answers.curriculum && (
-        <FieldGroup id="f-grade" title={t(ui.qGrade)} missing={missing}>
-          <div className="chip-list">
-            {grades.map((g) => (
-              <Chip key={g} selected={answers.grade === g} onClick={() => patch((a) => (a.grade === g ? a : { ...a, grade: g, teachers: {} }))}>
-                {g}
-              </Chip>
+      {programs.length > 0 && (
+        <FieldGroup id="f-program" title={t(ui.qProgram)} missing={missing}>
+          <div className="choice-grid stack">
+            {programs.map((p) => (
+              <ChoiceCard
+                key={p.id}
+                title={t(p.name)}
+                detail={t(p.detail)}
+                icon={PROGRAM_ICONS[p.id]}
+                selected={answers.program === p.id}
+                onClick={() => patch((a) => (a.program === p.id ? a : { ...a, program: p.id, teachers: {} }))}
+              />
             ))}
           </div>
         </FieldGroup>
@@ -320,6 +309,8 @@ function Identification({ answers, patch, missing }: Ctx) {
     </>
   )
 }
+
+const PROGRAM_ICONS: Record<ProgramId, IconName> = { bilingue: 'users', cambridge: 'book', nacional: 'school' }
 
 // ---------------------------------------------------------------------
 // 2–4 · Secções com escala (Organização, Direção, Administração)
@@ -337,7 +328,16 @@ function RatingPage({ section, answers, patch, missing }: Ctx & { section: Ratin
           const key = `${section.id}.${q.id}`
           if (q.type === 'text') {
             return (
-              <TextField key={key} standalone label={t(q.text)} value={answers.texts[key] ?? ''} onChange={(v) => setText(key, v)} rows={3} />
+              <TextField
+                key={key}
+                standalone
+                optional={!q.required}
+                label={t(q.text)}
+                placeholder={q.placeholder && t(q.placeholder)}
+                value={answers.texts[key] ?? ''}
+                onChange={(v) => setText(key, v)}
+                rows={q.placeholder ? 4 : 3}
+              />
             )
           }
           const value = answers.ratings[key]
@@ -367,7 +367,7 @@ function teacherComplete(a: Answers, tc: Teacher) {
 
 function Teachers({ answers, patch, missing, attempt }: Ctx) {
   const t = useT()
-  const list = useMemo(() => teachersFor(answers), [answers.campus, answers.curriculum, answers.grade]) // eslint-disable-line react-hooks/exhaustive-deps
+  const list = useMemo(() => teachersFor(answers), [answers.grade, answers.program]) // eslint-disable-line react-hooks/exhaustive-deps
   const firstIncomplete = list.findIndex((tc) => !teacherComplete(answers, tc))
   const [open, setOpen] = useState<number>(firstIncomplete === -1 ? -1 : firstIncomplete)
 
