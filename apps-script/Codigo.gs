@@ -105,7 +105,8 @@ function json_(obj) {
 const SHEET_PAINEL = 'Painel'
 const SHEET_PAINEL_PROF = 'Painel Professores'
 const SHEET_PAINEL_DIR = 'Painel Direção'
-const EMBLEMA_URL = 'https://tmbandze.github.io/dzovo-inquerito/emblema.png'
+// versão com fundo branco: no PDF do Google, a transparência do PNG original sai a preto
+const EMBLEMA_URL = 'https://tmbandze.github.io/dzovo-inquerito/emblema-impressao.png'
 const FONTE = 'Inter'
 const COR = {
   azul: '#1c3a63', azulSuave: '#e8eef6', texto: '#1f2937', cinza: '#6b7280',
@@ -625,12 +626,16 @@ const A4 = { largura: 8.27, altura: 11.69, margemLado: 0.4, margemTopo: 0.5 }
  * Quebras de página: se uma secção não cabe no resto da página mas cabe numa página
  * inteira, a linha de espaço antes dela cresce até ao fim da página e a secção começa
  * na seguinte. O PDF ajusta a largura das colunas à folha, por isso a altura útil
- * em px é proporcional à largura total das colunas.
+ * em px é proporcional à largura total das colunas (medido num PDF real: 718 px de
+ * largura → 1028 px de altura; o número de página fica na margem e não ocupa espaço).
+ * A linha de espaço tem de acabar um pouco ANTES do fim real da página: se passar,
+ * salta inteira para a página seguinte e deixa-a em branco no topo; se ficar mais de
+ * 30 px antes, o título da secção ainda cabe e fica sozinho no fundo da página.
  */
 function paginar_(g, larguraPx, paisagem) {
   const w = (paisagem ? A4.altura : A4.largura) - 2 * A4.margemLado
   const h = (paisagem ? A4.largura : A4.altura) - 2 * A4.margemTopo
-  const pagina = larguraPx * h / w * 0.93 // folga para o número de página e arredondamentos
+  const pagina = larguraPx * h / w - 12
   const inicio = {}
   g.secoes.forEach(function (r) { inicio[r - 1] = true })
   let y = 0
@@ -640,7 +645,7 @@ function paginar_(g, larguraPx, paisagem) {
       while (fim < g.alturas.length && !inicio[fim]) fim++
       const altura = g.alturas.slice(i, fim).reduce(function (a, b) { return a + b }, 0)
       if (altura <= pagina && y + altura > pagina) {
-        g.alturas[i] = Math.max(2, Math.floor(pagina - y) - 4)
+        g.alturas[i] = Math.max(2, Math.floor(pagina - y))
         y = 0
         continue
       }
