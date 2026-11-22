@@ -230,6 +230,11 @@ const FILTROS = [
 ]
 const TODOS = 'Todos'
 const LINHA_FILTROS = 6
+/** Larguras das colunas do Painel e do Painel Direção: somam ≈ 718 px, a largura útil
+ *  de um A4 ao alto, para o PDF sair a 100% e a letra não encolher. */
+const LARGURAS_PAINEL = [12, 238, 78, 78, 78, 78, 80, 76]
+const LARGURA_ROTULO = 228
+const LARGURA_TEXTO = 706
 /** Colunas de cada cartão / filtro no Painel: B, C:D, E:F, G:H */
 const BLOCOS = [[2, 2], [3, 4], [5, 6], [7, 8]]
 
@@ -240,6 +245,7 @@ const BLOCOS = [[2, 2], [3, 4], [5, 6], [7, 8]]
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('Inquérito')
     .addItem('Atualizar painel', 'atualizarPainel')
+    .addItem('Criar PDF para imprimir', 'criarPdfs')
     .addItem('Atualizar automaticamente (de hora a hora)', 'ativarAtualizacaoAutomatica')
     .addSeparator()
     .addItem('Apagar respostas de teste', 'apagarRespostasTeste')
@@ -384,6 +390,47 @@ function desenharPaineis_(ss) {
   desenharPainelDir_(ss.getSheetByName(SHEET_PAINEL_DIR) || ss.insertSheet(SHEET_PAINEL_DIR, 2), ctx)
 }
 
+/**
+ * Atualiza os painéis e mostra os links para os PDFs (A4, letra a 100%).
+ * Os PDFs são gerados pelo Google a partir de cada separador; abrem-se com a conta
+ * de quem clica, por isso não é preciso dar nenhuma autorização nova.
+ */
+function criarPdfs() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet()
+  const lock = LockService.getScriptLock()
+  lock.waitLock(30000)
+  try {
+    atualizaPaineisParaImprimir_(ss)
+  } finally {
+    lock.releaseLock()
+  }
+  const base = 'https://docs.google.com/spreadsheets/d/' + ss.getId() + '/export?format=pdf&size=A4&fitw=true' +
+    '&left_margin=' + A4.margemLado + '&right_margin=' + A4.margemLado + '&top_margin=' + A4.margemTopo + '&bottom_margin=' + A4.margemTopo +
+    '&gridlines=false&printtitle=false&sheetnames=false&pagenum=CENTER&horizontal_alignment=CENTER&fzr=false'
+  const filtros = descreverFiltros_(lerFiltros_(ss.getSheetByName(SHEET_PAINEL)))
+  const itens = [
+    [SHEET_PAINEL, 'Resultados gerais', true, ''],
+    [SHEET_PAINEL_DIR, 'Liderança da escola', true, 'confidencial'],
+    [SHEET_PAINEL_PROF, 'Avaliação dos professores', false, 'confidencial, A4 deitado'],
+  ].map(function (i) {
+    const sh = ss.getSheetByName(i[0])
+    if (!sh) return ''
+    const url = base + '&portrait=' + i[2] + '&gid=' + sh.getSheetId()
+    return '<a href="' + url + '" target="_blank"><b>' + i[1] + '</b><span>' + i[0] + (i[3] ? ' · ' + i[3] : '') + '</span></a>'
+  }).join('')
+  const html = '<style>body{font-family:Arial,sans-serif;color:#1f2937;margin:0}p{margin:0 0 12px;font-size:14px;line-height:1.45}' +
+    'a{display:block;margin:0 0 10px;padding:12px 14px;border:1px solid #dbe2ea;border-radius:10px;color:#1c3a63;text-decoration:none}' +
+    'a:hover{background:#e8eef6}b{display:block;font-size:15px}span{font-size:13px;color:#6b7280}</style>' +
+    '<p>Filtros: <b style="display:inline">' + filtros + '</b>. Para mudar, escolha no topo do separador Painel e volte a este menu.</p>' +
+    '<p>Clique para abrir o PDF e imprima (Ctrl+P). Os confidenciais são só para os responsáveis da escola.</p>' + itens
+  SpreadsheetApp.getUi().showModalDialog(HtmlService.createHtmlOutput(html).setWidth(420).setHeight(360), 'PDF para imprimir')
+}
+
+function atualizaPaineisParaImprimir_(ss) {
+  desenharPaineis_(ss)
+  SpreadsheetApp.flush()
+}
+
 // ---------------------------------------------------------------------
 // Leitura e contas
 // ---------------------------------------------------------------------
@@ -489,13 +536,13 @@ const ESTILOS = {
   cartao: function (r) { r.setBackground(COR.cartao).setHorizontalAlignment('center') },
   filtro: function (r) { r.setBackground(COR.azulSuave).setFontSize(11).setFontWeight('bold').setFontColor(COR.azul).setHorizontalAlignment('center') },
   titulo: function (r) { r.setFontSize(20).setFontWeight('bold').setFontColor(COR.azul) },
-  subtitulo: function (r) { r.setFontColor(COR.cinza) },
-  rotulo: function (r) { r.setFontSize(8).setFontWeight('bold').setFontColor(COR.cinza).setVerticalAlignment('bottom') },
+  subtitulo: function (r) { r.setFontColor(COR.cinza).setWrap(true).setVerticalAlignment('top') },
+  rotulo: function (r) { r.setFontSize(10).setFontWeight('bold').setFontColor(COR.cinza).setVerticalAlignment('bottom') },
   cartaoValor: function (r) { r.setFontSize(24).setFontWeight('bold').setFontColor(COR.azul) },
-  nota: function (r) { r.setFontSize(9).setFontColor(COR.cinza) },
-  secao: function (r) { r.setFontSize(13).setFontWeight('bold').setFontColor(COR.azul).setVerticalAlignment('bottom').setBorder(null, null, true, null, null, null, COR.azul, SpreadsheetApp.BorderStyle.SOLID_MEDIUM) },
+  nota: function (r) { r.setFontSize(10).setFontColor(COR.cinza).setWrap(true).setVerticalAlignment('top') },
+  secao: function (r) { r.setFontSize(14).setFontWeight('bold').setFontColor(COR.azul).setVerticalAlignment('bottom').setBorder(null, null, true, null, null, null, COR.azul, SpreadsheetApp.BorderStyle.SOLID_MEDIUM) },
   subsecao: function (r) { r.setFontWeight('bold').setFontColor(COR.azul).setVerticalAlignment('bottom') },
-  cabecalho: function (r) { r.setFontSize(8).setFontWeight('bold').setFontColor(COR.cinza) },
+  cabecalho: function (r) { r.setFontSize(10).setFontWeight('bold').setFontColor(COR.cinza).setWrap(true).setVerticalAlignment('bottom') },
   linha: function (r) { r.setBorder(null, null, true, null, null, null, COR.linha, SpreadsheetApp.BorderStyle.SOLID) },
   centro: function (r) { r.setHorizontalAlignment('center') },
   inteiro: function (r) { r.setNumberFormat('0').setHorizontalAlignment('center') },
@@ -506,13 +553,14 @@ const ESTILOS = {
   poucos: function (r) { r.setFontColor(COR.cinza).setFontStyle('italic') },
   envolver: function (r) { r.setWrap(true) },
   quebra: function (r) { r.setWrap(true).setVerticalAlignment('top') },
-  meta: function (r) { r.setFontSize(9).setFontColor(COR.cinza) },
-  rodape: function (r) { r.setFontSize(9).setFontStyle('italic').setFontColor(COR.cinza) },
+  meta: function (r) { r.setFontSize(10).setFontColor(COR.cinza) },
+  rodape: function (r) { r.setFontSize(10).setFontStyle('italic').setFontColor(COR.cinza).setWrap(true).setVerticalAlignment('top') },
   margem: function (r) { r.setBorder(null, true, null, true, null, null, '#ffffff', SpreadsheetApp.BorderStyle.SOLID_THICK) },
 }
 
-function novaGrelha_(colunas) {
-  const g = { colunas: colunas, linhas: [], alturas: [], estilos: {}, unioes: [], gradientes: [], formatos: [] }
+/** largura: px disponíveis para o texto das colunas B… (para estimar as linhas de texto). */
+function novaGrelha_(colunas, largura) {
+  const g = { colunas: colunas, largura: largura || 700, linhas: [], alturas: [], estilos: {}, unioes: [], gradientes: [], formatos: [], secoes: [] }
   g.linha = function (valores, altura) {
     const l = []
     for (let c = 1; c <= colunas; c++) l.push(valores && valores[c] !== undefined ? valores[c] : '')
@@ -537,7 +585,53 @@ function a1_(linha, c1, c2, linha2) {
   return letra_(c1) + linha + fim
 }
 
-function aplicarGrelha_(sh, g, larguras) {
+/** Folha A4 com as margens do PDF (polegadas): largura e altura úteis. */
+const A4 = { largura: 8.27, altura: 11.69, margemLado: 0.4, margemTopo: 0.5 }
+
+/**
+ * Quebras de página: se uma secção não cabe no resto da página mas cabe numa página
+ * inteira, a linha de espaço antes dela cresce até ao fim da página e a secção começa
+ * na seguinte. O PDF ajusta a largura das colunas à folha, por isso a altura útil
+ * em px é proporcional à largura total das colunas.
+ */
+function paginar_(g, larguraPx, paisagem) {
+  const w = (paisagem ? A4.altura : A4.largura) - 2 * A4.margemLado
+  const h = (paisagem ? A4.largura : A4.altura) - 2 * A4.margemTopo
+  const pagina = larguraPx * h / w * 0.93 // folga para o número de página e arredondamentos
+  const inicio = {}
+  g.secoes.forEach(function (r) { inicio[r - 1] = true })
+  let y = 0
+  for (let i = 0; i < g.alturas.length; i++) {
+    if (inicio[i] && y > 0) {
+      let fim = i + 1
+      while (fim < g.alturas.length && !inicio[fim]) fim++
+      const altura = g.alturas.slice(i, fim).reduce(function (a, b) { return a + b }, 0)
+      if (altura <= pagina && y + altura > pagina) {
+        g.alturas[i] = Math.max(2, Math.floor(pagina - y) - 4)
+        y = 0
+        continue
+      }
+    }
+    y = y + g.alturas[i] > pagina ? g.alturas[i] : y + g.alturas[i]
+  }
+}
+
+/** Altura de uma linha com texto que pode ocupar várias linhas. */
+function alturaTexto_(texto, larguraPx, minimo, tamanho) {
+  const porLinha = Math.max(10, Math.floor(larguraPx / ((tamanho || 10) * 0.62)))
+  const linhas = String(texto).split('\n').reduce(function (n, parte) { return n + Math.max(1, Math.ceil(parte.length / porLinha)) }, 0)
+  return Math.max(minimo || 26, linhas * Math.round((tamanho || 10) * 1.6) + 10)
+}
+
+/** Nota ou rodapé numa linha própria, a toda a largura, com quebra de linha. */
+function notaLinha_(g, estilo, texto) {
+  const r = g.linha({ 2: texto }, alturaTexto_(texto, g.largura, 22))
+  g.unir(a1_(r, 2, g.colunas)).estilo(estilo, a1_(r, 2, g.colunas))
+  return r
+}
+
+function aplicarGrelha_(sh, g, larguras, paisagem) {
+  paginar_(g, larguras.reduce(function (a, b) { return a + b }, 0), paisagem)
   const n = g.linhas.length, c = g.colunas
   sh.showColumns(1, sh.getMaxColumns())
   sh.getRange(1, 1, sh.getMaxRows(), sh.getMaxColumns()).breakApart().clear().clearDataValidations()
@@ -608,28 +702,32 @@ function titulo_(g, texto, sub, ultima) {
   espaco_(g, 16)
   const r = g.linha({ 2: texto }, 36)
   g.estilo('titulo', a1_(r, 2))
-  g.estilo('subtitulo', a1_(g.linha({ 2: sub }, 20), 2))
+  const rs = g.linha({ 2: sub }, alturaTexto_(sub, g.largura * 0.8, 22))
+  g.unir(a1_(rs, 2, ultima - 1)).estilo('subtitulo', a1_(rs, 2, ultima - 1))
   // emblema do colégio no canto direito
   g.linhas[r - 1][ultima - 1] = '=IMAGE("' + EMBLEMA_URL + '")'
-  g.unir(a1_(r, ultima, ultima, r + 1))
+  g.unir(a1_(r, ultima, ultima, rs))
 }
 
 function secao_(g, texto, ultima) {
   espaco_(g, 22)
+  g.secoes.push(g.linhas.length)
   g.estilo('secao', a1_(g.linha({ 2: texto }, 30), 2, ultima))
 }
 
 function cabecalho_(g, nomes, ultima, primeiraNum) {
-  const r = g.linha(nomes, 24)
+  // nomes compridos (ex.: "Full Cambridge" numa coluna estreita) passam a duas linhas
+  const longo = Object.keys(nomes).some(function (k) { return k > 2 && String(nomes[k]).length > 11 })
+  const r = g.linha(nomes, longo ? 40 : 26)
   g.estilo('cabecalho', a1_(r, 2, ultima)).estilo('centro', a1_(r, primeiraNum, ultima)).estilo('linha', a1_(r, 2, ultima))
   return r
 }
 
 /** Linha com média (1–5), barra colorida, % satisfeitos e nº de respostas. */
 function linhaNota_(g, rotulo, e, forte) {
-  const r = g.linha({ 2: rotulo, 3: e.media, 4: barra_(e.media, 5, corNota_(e.media)), 7: e.satisfeitos, 8: e.n }, 26)
+  const r = g.linha({ 2: rotulo, 3: e.media, 4: barra_(e.media, 5, corNota_(e.media)), 7: e.satisfeitos, 8: e.n }, alturaTexto_(rotulo, LARGURA_ROTULO))
   g.unir(a1_(r, 4, 6))
-  g.estilo('linha', a1_(r, 2, 8)).estilo('media', a1_(r, 3)).estilo('pct', a1_(r, 7)).estilo('centro', a1_(r, 8))
+  g.estilo('envolver', a1_(r, 2)).estilo('linha', a1_(r, 2, 8)).estilo('media', a1_(r, 3)).estilo('pct', a1_(r, 7)).estilo('centro', a1_(r, 8))
   if (forte) g.estilo('forte', a1_(r, 2))
   g.gradientes.push(a1_(r, 3))
 }
@@ -637,9 +735,9 @@ function linhaNota_(g, rotulo, e, forte) {
 /** Linha com contagem, barra e percentagem do total. */
 function linhaContagem_(g, rotulo, n, total, cor) {
   const pct = total ? n / total : 0
-  const r = g.linha({ 2: rotulo, 3: n, 4: barra_(pct, 1, cor || COR.azul), 7: pct }, 26)
+  const r = g.linha({ 2: rotulo, 3: n, 4: barra_(pct, 1, cor || COR.azul), 7: pct }, alturaTexto_(rotulo, LARGURA_ROTULO))
   g.unir(a1_(r, 4, 6))
-  g.estilo('linha', a1_(r, 2, 8)).estilo('inteiro', a1_(r, 3)).estilo('pct', a1_(r, 7))
+  g.estilo('envolver', a1_(r, 2)).estilo('linha', a1_(r, 2, 8)).estilo('inteiro', a1_(r, 3)).estilo('pct', a1_(r, 7))
 }
 
 function atualizadoEm_(ctx) {
@@ -652,7 +750,7 @@ function atualizadoEm_(ctx) {
 
 function desenharPainel_(sh, ctx) {
   const R = ctx.respostas, P = ctx.professores
-  const g = novaGrelha_(8)
+  const g = novaGrelha_(8, LARGURA_TEXTO)
 
   titulo_(g, 'Inquérito aos Encarregados de Educação',
     'Colégio Dzovo  ·  ' + descreverFiltros_(ctx.filtros) + '  ·  atualizado em ' + atualizadoEm_(ctx), 8)
@@ -661,7 +759,7 @@ function desenharPainel_(sh, ctx) {
   // filtros
   const rotulos = {}, valores = {}
   FILTROS.forEach(function (d, i) {
-    rotulos[BLOCOS[i][0]] = d.nome.toUpperCase()
+    rotulos[BLOCOS[i][0]] = d.nome
     valores[BLOCOS[i][0]] = ctx.filtros[d.coluna]
   })
   const rRot = g.linha(rotulos, 18), rFil = g.linha(valores, 30)
@@ -671,17 +769,17 @@ function desenharPainel_(sh, ctx) {
     g.estilo('rotulo', a1_(rRot, b[0], b[1])).estilo('centro', a1_(rRot, b[0], b[1]))
     g.estilo('filtro', a1_(rFil, b[0], b[1])).estilo('margem', a1_(rRot, b[0], b[1], rFil))
   })
-  g.estilo('nota', a1_(g.linha({ 2: 'Escolha nos campos acima para filtrar os resultados. "Todos" mostra tudo.' }, 22), 2))
+  notaLinha_(g, 'nota', 'Escolha nos campos acima para filtrar os resultados. "Todos" mostra tudo.')
   espaco_(g, 10)
 
   // cartões
   const geral = estatisticaGeral_(R, P), rec = recomendacao_(R)
   const cartoes = [
-    { rotulo: 'RESPOSTAS', valor: R.length, formato: '0',
+    { rotulo: 'Respostas', valor: R.length, formato: '0',
       nota: R.length === ctx.todas.length ? 'encarregados responderam' : 'de ' + ctx.todas.length + ' no total' },
-    { rotulo: 'SATISFAÇÃO MÉDIA', valor: geral.media, formato: '0.0" / 5"',
+    { rotulo: 'Satisfação média', valor: geral.media, formato: '0.0" / 5"',
       nota: typeof geral.satisfeitos === 'number' ? Math.round(geral.satisfeitos * 100) + '% de notas 4 ou 5' : 'sem notas' },
-    { rotulo: 'RECOMENDAÇÃO', valor: rec.media, formato: '0.0" / 10"', nota: 'recomendaria a escola?' },
+    { rotulo: 'Recomendação', valor: rec.media, formato: '0.0" / 10"', nota: 'recomendaria a escola?' },
     { rotulo: 'NPS', valor: rec.nps, formato: '+0;-0;0',
       nota: rec.n ? pct_(rec.promotores, rec.n) + ' promotores · ' + pct_(rec.criticos, rec.n) + ' críticos' : 'sem respostas' },
   ]
@@ -690,17 +788,17 @@ function desenharPainel_(sh, ctx) {
     const c = BLOCOS[i][0]
     l1[c] = k.rotulo; l2[c] = typeof k.valor === 'number' ? k.valor : '—'; l3[c] = k.nota
   })
-  const r1 = g.linha(l1, 26), r2 = g.linha(l2, 46), r3 = g.linha(l3, 26)
+  const r1 = g.linha(l1, 28), r2 = g.linha(l2, 46), r3 = g.linha(l3, 40)
   BLOCOS.forEach(function (b, i) {
     ;[r1, r2, r3].forEach(function (r) { g.unir(a1_(r, b[0], b[1])) })
     g.estilo('cartao', a1_(r1, b[0], b[1], r3)).estilo('margem', a1_(r1, b[0], b[1], r3))
-    g.estilo('rotulo', a1_(r1, b[0], b[1])).estilo('cartaoValor', a1_(r2, b[0], b[1])).estilo('nota', a1_(r3, b[0], b[1]))
+    g.estilo('rotulo', a1_(r1, b[0], b[1])).estilo('cartaoValor', a1_(r2, b[0], b[1])).estilo('nota', a1_(r3, b[0], b[1])).estilo('centro', a1_(r3, b[0], b[1]))
     g.formatos.push({ a1: a1_(r2, b[0]), formato: cartoes[i].formato })
   })
 
   if (!R.length) {
     secao_(g, 'Ainda não há respostas para estes filtros.', 8)
-    aplicarGrelha_(sh, g, [20, 230, 115, 115, 115, 115, 115, 115])
+    aplicarGrelha_(sh, g, LARGURAS_PAINEL)
     validarFiltros_(sh, ctx)
     return
   }
@@ -709,12 +807,12 @@ function desenharPainel_(sh, ctx) {
 
   // satisfação por área
   secao_(g, 'Satisfação por área', 8)
-  cabecalho_(g, { 2: 'ÁREA', 3: 'MÉDIA', 7: 'SATISFEITOS', 8: 'RESPOSTAS' }, 8, 3)
+  cabecalho_(g, { 2: 'Área', 3: 'Média', 7: 'Satisfeitos', 8: 'Respostas' }, 8, 3)
   todasAreas.forEach(function (a) {
     const e = estatisticaArea_(a, R, P)
     linhaNota_(g, a.nome, { media: e.media, satisfeitos: e.satisfeitos, n: e.pessoas })
   })
-  g.estilo('nota', a1_(g.linha({ 2: 'O detalhe da Direção está no separador "' + SHEET_PAINEL_DIR + '" (confidencial).' }, 22), 2))
+  notaLinha_(g, 'nota', 'O detalhe da Direção está no separador "' + SHEET_PAINEL_DIR + '" (confidencial).')
 
   // pontos fortes e a melhorar
   const perguntas = []
@@ -730,21 +828,21 @@ function desenharPainel_(sh, ctx) {
   const k = Math.min(3, Math.floor(perguntas.length / 2))
   if (k > 0) {
     secao_(g, 'Pontos mais fortes', 8)
-    cabecalho_(g, { 2: 'PERGUNTA', 3: 'MÉDIA', 7: 'SATISFEITOS', 8: 'RESPOSTAS' }, 8, 3)
+    cabecalho_(g, { 2: 'Pergunta', 3: 'Média', 7: 'Satisfeitos', 8: 'Respostas' }, 8, 3)
     perguntas.slice(0, k).forEach(function (p) { linhaNota_(g, p.rotulo, p.e) })
     secao_(g, 'Pontos a melhorar', 8)
-    cabecalho_(g, { 2: 'PERGUNTA', 3: 'MÉDIA', 7: 'SATISFEITOS', 8: 'RESPOSTAS' }, 8, 3)
+    cabecalho_(g, { 2: 'Pergunta', 3: 'Média', 7: 'Satisfeitos', 8: 'Respostas' }, 8, 3)
     perguntas.slice(-k).reverse().forEach(function (p) { linhaNota_(g, p.rotulo, p.e) })
   }
 
   // recomendação
   if (rec.n) {
     secao_(g, 'Recomendaria a escola a outras famílias? (0 a 10)', 8)
-    cabecalho_(g, { 2: 'GRUPO', 3: 'PAIS', 7: '%' }, 8, 3)
+    cabecalho_(g, { 2: 'Grupo', 3: 'Pais', 7: '%' }, 8, 3)
     linhaContagem_(g, 'Promotores (9–10)', rec.promotores, rec.n, COR.verde)
     linhaContagem_(g, 'Neutros (7–8)', rec.neutros, rec.n, COR.ambar)
     linhaContagem_(g, 'Críticos (0–6)', rec.criticos, rec.n, COR.vermelho)
-    g.estilo('nota', a1_(g.linha({ 2: 'NPS = % promotores − % críticos. Vai de −100 a +100: acima de 0 é positivo, acima de 50 é excelente.' }, 22), 2))
+    notaLinha_(g, 'nota', 'NPS = % promotores − % críticos. Vai de −100 a +100: acima de 0 é positivo, acima de 50 é excelente.')
   }
 
   // comparação entre recintos e currículos
@@ -763,8 +861,8 @@ function desenharPainel_(sh, ctx) {
   if (grupos.length > 1) {
     const gs = grupos.slice(0, 6), ultimaG = 2 + gs.length
     secao_(g, 'Comparação entre recintos e currículos', 8)
-    const cab = { 2: 'ÁREA' }
-    gs.forEach(function (gr, i) { cab[3 + i] = gr.nome.toUpperCase() })
+    const cab = { 2: 'Área' }
+    gs.forEach(function (gr, i) { cab[3 + i] = gr.nome })
     cabecalho_(g, cab, 8, 3)
     todasAreas.forEach(function (a) {
       const v = { 2: a.nome }
@@ -787,7 +885,7 @@ function desenharPainel_(sh, ctx) {
   todasAreas.forEach(function (a) {
     if (a.confidencial) return
     secao_(g, a.nome + ' — por pergunta', 8)
-    cabecalho_(g, { 2: 'PERGUNTA', 3: 'MÉDIA', 7: 'SATISFEITOS', 8: 'RESPOSTAS' }, 8, 3)
+    cabecalho_(g, { 2: 'Pergunta', 3: 'Média', 7: 'Satisfeitos', 8: 'Respostas' }, 8, 3)
     Object.keys(a.colunas).forEach(function (c) {
       linhaNota_(g, a.colunas[c], estatistica_(a.professores ? P : R, [c]), /_geral$/.test(c))
     })
@@ -802,21 +900,21 @@ function desenharPainel_(sh, ctx) {
   const familias = distintos_(R.filter(function (r) { return r.ec_familia !== undefined }), 'ec_familia', OPCOES_FAMILIA)
   if (familias.length) {
     secao_(g, 'Educação Cristã — a família é cristã?', 8)
-    cabecalho_(g, { 2: 'RESPOSTA', 3: 'PAIS', 7: '%' }, 8, 3)
+    cabecalho_(g, { 2: 'Resposta', 3: 'Pais', 7: '%' }, 8, 3)
     const nFam = R.filter(function (r) { return String(r.ec_familia || '') !== '' }).length
     familias.forEach(function (f) {
       linhaContagem_(g, f, R.filter(function (r) { return String(r.ec_familia) === f }).length, nFam)
     })
     g.estilo('subsecao', a1_(g.linha({ 2: 'Respeito pela fé de cada família, por grupo' }, 26), 2))
-    cabecalho_(g, { 2: 'GRUPO', 3: 'MÉDIA', 7: 'SATISFEITOS', 8: 'RESPOSTAS' }, 8, 3)
+    cabecalho_(g, { 2: 'Grupo', 3: 'Média', 7: 'Satisfeitos', 8: 'Respostas' }, 8, 3)
     familias.forEach(function (f) {
       linhaNota_(g, f, estatistica_(R.filter(function (r) { return String(r.ec_familia) === f }), ['ec_respeito']))
     })
-    g.estilo('nota', a1_(g.linha({ 2: 'Só as famílias que responderam "Sim" veem as perguntas sobre as aulas; as outras podem responder ao respeito pela fé e deixar observações.' }, 22), 2))
+    notaLinha_(g, 'nota', 'Só as famílias que responderam "Sim" veem as perguntas sobre as aulas; as outras podem responder ao respeito pela fé e deixar observações.')
   }
   if (dev.length) {
     secao_(g, 'Educação Cristã — o que os pais notaram no educando', 8)
-    cabecalho_(g, { 2: 'PERGUNTA', 3: 'SIM, MUITO', 4: 'UM POUCO', 5: 'NÃO NOTEI', 6: 'NÃO SEI', 7: 'NOTARAM', 8: 'RESPOSTAS' }, 8, 3)
+    cabecalho_(g, { 2: 'Pergunta', 3: 'Sim, muito', 4: 'Um pouco', 5: 'Não notei', 6: 'Não sei', 7: 'Notaram', 8: 'Respostas' }, 8, 3)
     dev.forEach(function (d) {
       const sabem = d.n - d.conta[3]
       const v = { 2: d.rotulo, 7: sabem ? (d.conta[0] + d.conta[1]) / sabem : '', 8: d.n }
@@ -824,7 +922,7 @@ function desenharPainel_(sh, ctx) {
       const r = g.linha(v, 26)
       g.estilo('linha', a1_(r, 2, 8)).estilo('pct', a1_(r, 3, 7)).estilo('forte', a1_(r, 7)).estilo('centro', a1_(r, 8))
     })
-    g.estilo('nota', a1_(g.linha({ 2: '"Notaram" = Sim, muito + Um pouco, sem contar quem respondeu "Não sei". Filtre por classe ou recinto no topo.' }, 22), 2))
+    notaLinha_(g, 'nota', '"Notaram" = Sim, muito + Um pouco, sem contar quem respondeu "Não sei". Filtre por classe ou recinto no topo.')
   }
 
   // melhorias prioritárias
@@ -838,13 +936,13 @@ function desenharPainel_(sh, ctx) {
   const melhorias = Object.keys(votos).sort(function (a, b) { return votos[b] - votos[a] })
   if (melhorias.length) {
     secao_(g, 'Melhorias prioritárias (cada encarregado escolhe até 3)', 8)
-    cabecalho_(g, { 2: 'ÁREA A MELHORAR', 3: 'VOTOS', 7: '% DOS PAIS' }, 8, 3)
+    cabecalho_(g, { 2: 'Área a melhorar', 3: 'Votos', 7: '% dos pais' }, 8, 3)
     melhorias.forEach(function (m) { linhaContagem_(g, m, votos[m], R.length) })
   }
 
   // quem respondeu
   secao_(g, 'Quem respondeu', 8)
-  cabecalho_(g, { 3: 'RESPOSTAS', 7: '%' }, 8, 3)
+  cabecalho_(g, { 3: 'Respostas', 7: '%' }, 8, 3)
   ;[['recinto', 'Recinto'], ['curriculo', 'Currículo'], ['classe', 'Classe'], ['tempo_na_escola', 'Tempo na escola']].forEach(function (d) {
     g.estilo('subsecao', a1_(g.linha({ 2: d[1] }, 26), 2))
     distintos_(R, d[0]).forEach(function (v) {
@@ -866,20 +964,20 @@ function desenharPainel_(sh, ctx) {
     secao_(g, 'Comentários mais recentes', 8)
     comentarios.slice(0, 15).forEach(function (c) {
       const meta = (c.data instanceof Date ? Utilities.formatDate(c.data, ctx.tz, 'dd/MM') + ' · ' : '') + c.recinto + '\n' + c.tipo
-      const r = g.linha({ 2: meta, 3: clean_(c.texto) }, Math.max(42, Math.ceil(c.texto.length / 95) * 17 + 14))
+      const r = g.linha({ 2: meta, 3: clean_(c.texto) }, Math.max(alturaTexto_(c.texto, LARGURA_TEXTO - LARGURAS_PAINEL[1]), alturaTexto_(meta, LARGURA_ROTULO, 42)))
       g.unir(a1_(r, 3, 8))
       g.estilo('meta', a1_(r, 2)).estilo('quebra', a1_(r, 2, 8)).estilo('linha', a1_(r, 2, 8))
     })
     if (comentarios.length > 15) {
-      g.estilo('nota', a1_(g.linha({ 2: 'Mais ' + (comentarios.length - 15) + ' comentários na folha Respostas.' }, 22), 2))
+      notaLinha_(g, 'nota', 'Mais ' + (comentarios.length - 15) + ' comentários na folha Respostas.')
     }
   }
 
   espaco_(g, 18)
-  g.estilo('rodape', a1_(g.linha({ 2: 'Notas de 1 (muito insatisfeito) a 5 (muito satisfeito). "Satisfeitos" = notas 4 e 5.' }, 18), 2))
-  g.estilo('rodape', a1_(g.linha({ 2: 'As respostas "Não sei" não entram nas contas. Os dados de contacto nunca aparecem neste painel.' }, 18), 2))
+  notaLinha_(g, 'rodape', 'Notas de 1 (muito insatisfeito) a 5 (muito satisfeito). "Satisfeitos" = notas 4 e 5.')
+  notaLinha_(g, 'rodape', 'As respostas "Não sei" não entram nas contas. Os dados de contacto nunca aparecem neste painel.')
 
-  aplicarGrelha_(sh, g, [20, 230, 115, 115, 115, 115, 115, 115])
+  aplicarGrelha_(sh, g, LARGURAS_PAINEL)
   validarFiltros_(sh, ctx)
 }
 
@@ -899,11 +997,11 @@ function desenharPainelProf_(sh, ctx) {
   const P = ctx.professores
   const colunas = Object.keys(PERGUNTAS_PROF)
   const ultima = 6 + colunas.length // B–E dados, F… perguntas, última coluna = barra
-  const g = novaGrelha_(ultima)
+  const g = novaGrelha_(ultima, 1000)
 
   titulo_(g, 'Avaliação dos professores',
     'CONFIDENCIAL — apenas para a Direção  ·  ' + descreverFiltros_(ctx.filtros) + '  ·  atualizado em ' + atualizadoEm_(ctx), ultima)
-  g.estilo('nota', a1_(g.linha({ 2: 'Os filtros escolhem-se no separador Painel. Cada linha resume as avaliações dos encarregados a um(a) professor(a).' }, 22), 2))
+  notaLinha_(g, 'nota', 'Os filtros escolhem-se no separador Painel. Cada linha resume as avaliações dos encarregados a um(a) professor(a).')
 
   const grupos = {}
   P.forEach(function (p) {
@@ -918,12 +1016,12 @@ function desenharPainelProf_(sh, ctx) {
 
   secao_(g, 'Resultados por professor', ultima)
   if (!chaves.length) {
-    g.estilo('nota', a1_(g.linha({ 2: 'Ainda não há avaliações de professores para estes filtros.' }, 26), 2))
+    notaLinha_(g, 'nota', 'Ainda não há avaliações de professores para estes filtros.')
   } else {
-    const cab = { 2: 'PROFESSOR(A)', 3: 'DISCIPLINA', 4: 'TURMA', 5: 'AVALIAÇÕES' }
-    colunas.forEach(function (c, i) { cab[6 + i] = PERGUNTAS_PROF[c].toUpperCase() })
+    const cab = { 2: 'Professor(a)', 3: 'Disciplina', 4: 'Turma', 5: 'Avaliações' }
+    colunas.forEach(function (c, i) { cab[6 + i] = PERGUNTAS_PROF[c] })
     const rc = cabecalho_(g, cab, ultima, 5)
-    g.alturas[rc - 1] = 44
+    g.alturas[rc - 1] = 58
     g.estilo('envolver', a1_(rc, 2, ultima))
 
     chaves.forEach(function (k) {
@@ -934,21 +1032,22 @@ function desenharPainelProf_(sh, ctx) {
       colunas.forEach(function (c, i) { v[6 + i] = estatistica_(gr.regs, [c]).media })
       const geral = estatistica_(gr.regs, ['prof_geral']).media
       v[ultima] = barra_(geral, 5, corNota_(geral))
-      const r = g.linha(v, 28)
-      g.estilo('linha', a1_(r, 2, ultima)).estilo('forte', a1_(r, 2)).estilo('centro', a1_(r, 5)).estilo('media', a1_(r, 6, ultima - 1))
+      const r = g.linha(v, Math.max(alturaTexto_(v[2], 160, 30), alturaTexto_(v[4], 150, 30)))
+      g.estilo('envolver', a1_(r, 2, 4)).estilo('linha', a1_(r, 2, ultima)).estilo('forte', a1_(r, 2)).estilo('centro', a1_(r, 5)).estilo('media', a1_(r, 6, ultima - 1))
       g.gradientes.push(a1_(r, 6, ultima - 1))
       if (gr.regs.length < 3) g.estilo('poucos', a1_(r, 2, 5))
     })
   }
 
   espaco_(g, 18)
-  g.estilo('rodape', a1_(g.linha({ 2: 'Linhas a cinzento: menos de 3 avaliações, interpretar com cuidado.' }, 18), 2))
-  g.estilo('rodape', a1_(g.linha({ 2: 'Notas de 1 a 5. As respostas "Não sei" não entram nas contas.' }, 18), 2))
+  notaLinha_(g, 'rodape', 'Linhas a cinzento: menos de 3 avaliações, interpretar com cuidado.')
+  notaLinha_(g, 'rodape', 'Notas de 1 a 5. As respostas "Não sei" não entram nas contas.')
 
-  const larguras = [20, 210, 140, 220, 90]
-  colunas.forEach(function () { larguras.push(95) })
-  larguras.push(130)
-  aplicarGrelha_(sh, g, larguras)
+  // A4 deitado: as colunas somam ≈ 1028 px, a largura útil da folha
+  const larguras = [12, 170, 110, 160, 72]
+  colunas.forEach(function () { larguras.push(68) })
+  larguras.push(96)
+  aplicarGrelha_(sh, g, larguras, true)
 }
 
 // ---------------------------------------------------------------------
@@ -957,23 +1056,23 @@ function desenharPainelProf_(sh, ctx) {
 
 function desenharPainelDir_(sh, ctx) {
   const R = ctx.respostas
-  const g = novaGrelha_(8)
+  const g = novaGrelha_(8, LARGURA_TEXTO)
   const semGeral = function (cols) { return cols.filter(function (c) { return !/_geral$/.test(c) }) }
 
   titulo_(g, 'Liderança da escola — Direção',
     'CONFIDENCIAL — apenas para os responsáveis da escola  ·  ' + descreverFiltros_(ctx.filtros) + '  ·  atualizado em ' + atualizadoEm_(ctx), 8)
-  g.estilo('nota', a1_(g.linha({ 2: 'Os filtros escolhem-se no separador Painel. As respostas são anónimas; os comentários aparecem tal como foram escritos.' }, 22), 2))
+  notaLinha_(g, 'nota', 'Os filtros escolhem-se no separador Painel. As respostas são anónimas; os comentários aparecem tal como foram escritos.')
 
   const todas = colunasDe_(GRUPOS_DIR)
   if (!estatistica_(R, todas).n) {
     secao_(g, 'Ainda não há respostas sobre a Direção para estes filtros.', 8)
-    aplicarGrelha_(sh, g, [20, 260, 115, 115, 115, 115, 115, 115])
+    aplicarGrelha_(sh, g, LARGURAS_PAINEL)
     return
   }
 
   // resumo e temas
   secao_(g, 'Resumo', 8)
-  cabecalho_(g, { 2: '', 3: 'MÉDIA', 7: 'SATISFEITOS', 8: 'RESPOSTAS' }, 8, 3)
+  cabecalho_(g, { 2: '', 3: 'Média', 7: 'Satisfeitos', 8: 'Respostas' }, 8, 3)
   linhaNota_(g, 'Satisfação geral com a Direção', estatistica_(R, ['dir_dir_geral']), true)
   GRUPOS_DIR.forEach(function (gr) {
     linhaNota_(g, gr.nome, estatistica_(R, semGeral(Object.keys(gr.colunas))))
@@ -987,10 +1086,10 @@ function desenharPainelDir_(sh, ctx) {
   const k = Math.min(3, Math.floor(perguntas.length / 2))
   if (k > 0) {
     secao_(g, 'Pontos mais fortes', 8)
-    cabecalho_(g, { 2: 'PERGUNTA', 3: 'MÉDIA', 7: 'SATISFEITOS', 8: 'RESPOSTAS' }, 8, 3)
+    cabecalho_(g, { 2: 'Pergunta', 3: 'Média', 7: 'Satisfeitos', 8: 'Respostas' }, 8, 3)
     perguntas.slice(0, k).forEach(function (p) { linhaNota_(g, p.rotulo, p.e) })
     secao_(g, 'Pontos a melhorar', 8)
-    cabecalho_(g, { 2: 'PERGUNTA', 3: 'MÉDIA', 7: 'SATISFEITOS', 8: 'RESPOSTAS' }, 8, 3)
+    cabecalho_(g, { 2: 'Pergunta', 3: 'Média', 7: 'Satisfeitos', 8: 'Respostas' }, 8, 3)
     perguntas.slice(-k).reverse().forEach(function (p) { linhaNota_(g, p.rotulo, p.e) })
   }
 
@@ -998,17 +1097,17 @@ function desenharPainelDir_(sh, ctx) {
   const evol = R.filter(function (r) { return String(r.dir_evolucao || '') !== '' })
   if (evol.length) {
     secao_(g, 'Comparando com anos anteriores, a liderança da escola…', 8)
-    cabecalho_(g, { 2: 'RESPOSTA', 3: 'PAIS', 7: '%' }, 8, 3)
+    cabecalho_(g, { 2: 'Resposta', 3: 'Pais', 7: '%' }, 8, 3)
     OPCOES_EVOLUCAO.forEach(function (o) {
       linhaContagem_(g, o[0], evol.filter(function (r) { return String(r.dir_evolucao) === o[0] }).length, evol.length, o[1])
     })
-    g.estilo('nota', a1_(g.linha({ 2: 'Só respondem os pais com o educando na escola há mais de 1 ano.' }, 22), 2))
+    notaLinha_(g, 'nota', 'Só respondem os pais com o educando na escola há mais de 1 ano.')
   }
 
   // por pergunta
   GRUPOS_DIR.forEach(function (gr) {
     secao_(g, gr.nome, 8)
-    cabecalho_(g, { 2: 'PERGUNTA', 3: 'MÉDIA', 7: 'SATISFEITOS', 8: 'RESPOSTAS' }, 8, 3)
+    cabecalho_(g, { 2: 'Pergunta', 3: 'Média', 7: 'Satisfeitos', 8: 'Respostas' }, 8, 3)
     Object.keys(gr.colunas).forEach(function (c) {
       linhaNota_(g, gr.colunas[c], estatistica_(R, [c]), /_geral$/.test(c))
     })
@@ -1026,8 +1125,8 @@ function desenharPainelDir_(sh, ctx) {
   if (grupos.length) {
     const gs = [{ nome: 'Geral', R: R }].concat(grupos).slice(0, 6), ultimaG = 2 + gs.length
     secao_(g, 'Comparação entre recintos e currículos', 8)
-    const cab = { 2: 'TEMA' }
-    gs.forEach(function (gr, i) { cab[3 + i] = gr.nome.toUpperCase() })
+    const cab = { 2: 'Tema' }
+    gs.forEach(function (gr, i) { cab[3 + i] = gr.nome })
     cabecalho_(g, cab, 8, 3)
     GRUPOS_DIR.map(function (gr) { return [gr.nome, semGeral(Object.keys(gr.colunas))] })
       .concat([['Satisfação geral', ['dir_dir_geral']]])
@@ -1050,17 +1149,17 @@ function desenharPainelDir_(sh, ctx) {
     lista.forEach(function (r) {
       const texto = String(r[c]).trim()
       const meta = (r.data_hora instanceof Date ? Utilities.formatDate(r.data_hora, ctx.tz, 'dd/MM') + ' · ' : '') + r.recinto
-      const linha = g.linha({ 2: meta, 3: clean_(texto) }, Math.max(34, Math.ceil(texto.length / 95) * 17 + 14))
+      const linha = g.linha({ 2: meta, 3: clean_(texto) }, Math.max(alturaTexto_(texto, LARGURA_TEXTO - LARGURAS_PAINEL[1]), alturaTexto_(meta, LARGURA_ROTULO, 34)))
       g.unir(a1_(linha, 3, 8))
       g.estilo('meta', a1_(linha, 2)).estilo('quebra', a1_(linha, 2, 8)).estilo('linha', a1_(linha, 2, 8))
     })
   })
 
   espaco_(g, 18)
-  g.estilo('rodape', a1_(g.linha({ 2: 'Notas de 1 (muito insatisfeito) a 5 (muito satisfeito). "Satisfeitos" = notas 4 e 5. "Não sei" não entra nas contas.' }, 18), 2))
-  g.estilo('rodape', a1_(g.linha({ 2: 'As perguntas novas deste ano só contam as respostas dadas depois de terem sido acrescentadas ao inquérito.' }, 18), 2))
+  notaLinha_(g, 'rodape', 'Notas de 1 (muito insatisfeito) a 5 (muito satisfeito). "Satisfeitos" = notas 4 e 5. "Não sei" não entra nas contas.')
+  notaLinha_(g, 'rodape', 'As perguntas novas deste ano só contam as respostas dadas depois de terem sido acrescentadas ao inquérito.')
 
-  aplicarGrelha_(sh, g, [20, 260, 115, 115, 115, 115, 115, 115])
+  aplicarGrelha_(sh, g, LARGURAS_PAINEL)
 }
 
 // ---------------------------------------------------------------------

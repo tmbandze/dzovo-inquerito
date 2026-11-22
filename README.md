@@ -76,6 +76,9 @@ O mesmo `Codigo.gs` cria um menu **Inquérito** na Google Sheet (aparece ao abri
   comparação entre recintos e currículos; melhorias pedidas; quem respondeu; comentários) e o
   separador **Painel Professores** (confidencial), e o separador **Painel Direção** (confidencial: o detalhe da liderança do Diretor,
   com temas, comparação com anos anteriores e todos os comentários; no Painel geral a Direção só aparece como média). Também arruma o aspeto das folhas de respostas.
+- **Criar PDF para imprimir**: atualiza os painéis e mostra os links para os PDFs em A4 (Painel, Painel Direção e
+  Painel Professores, este último com a folha deitada). As colunas estão feitas à medida do A4, por isso a letra
+  sai no tamanho real (pelo menos 10 pt) e as secções que cabem numa página não ficam partidas.
 - **Atualizar automaticamente (de hora a hora)**: liga a atualização automática.
 - **Apagar respostas de teste**: apaga as linhas com `TESTE` na coluna `edicao`.
 - **Apagar TODAS as respostas (recomeçar do zero)**: apaga os separadores Respostas e Professores
@@ -84,8 +87,8 @@ O mesmo `Codigo.gs` cria um menu **Inquérito** na Google Sheet (aparece ao abri
 Se apagares linhas à mão, o Painel redesenha-se sozinho, e as avaliações de professores
 de uma resposta apagada deixam de contar.
 
-Os filtros (recinto, currículo, classe, edição) escolhem-se no topo do Painel. Para apresentar,
-**Ficheiro → Transferir → PDF**, escolhendo "Folha atual". O painel não mostra dados de contacto.
+Os filtros (recinto, currículo, classe, edição) escolhem-se no topo do Painel e valem também para os PDFs.
+Para imprimir, usar **Inquérito → Criar PDF para imprimir**. O painel não mostra dados de contacto.
 Não mudar o texto dos cabeçalhos das folhas Respostas e Professores: são usados para gravar.
 
 ## 3. Publicar no GitHub Pages
