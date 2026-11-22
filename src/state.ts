@@ -46,7 +46,9 @@ export const gateOf = (s: RatingSection, a: Answers) => (s.gate ? a.choices[`${s
 /** Perguntas que o encarregado vê, conforme a resposta à pergunta de entrada.
  *  Sem resposta à entrada: nenhuma. Entrada fechada: só as "forAll", todas opcionais. */
 export function visibleQuestions(s: RatingSection, a: Answers): { q: Question; required: boolean }[] {
-  const all = s.questions.map((q) => ({ q, required: !!q.required }))
+  const all = s.questions
+    .filter((q) => q.minDuration === undefined || (a.duration ?? -1) >= q.minDuration)
+    .map((q) => ({ q, required: !!q.required }))
   if (!s.gate) return all
   const g = gateOf(s, a)
   if (g === undefined) return []
@@ -160,7 +162,7 @@ export function buildPayload(a: Answers, lang: Lang) {
       const col = `${s.id}_${q.id}`
       if (!visible.has(q.id)) { resposta[col] = ''; continue }
       if (q.type === 'scale') resposta[col] = a.ratings[key] ?? ''
-      else if (q.type === 'choice') resposta[col] = CHOICE_OPTIONS.find((o) => o.id === a.choices[key])?.text.pt ?? ''
+      else if (q.type === 'choice') resposta[col] = (q.options ?? CHOICE_OPTIONS).find((o) => o.id === a.choices[key])?.text.pt ?? ''
       else resposta[col] = (a.texts[key] ?? '').trim()
     }
   }

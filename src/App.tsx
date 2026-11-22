@@ -353,7 +353,12 @@ function RatingPage({ section, answers, patch, missing }: Ctx & { section: Ratin
       <div className="question-list">
         {visibleQuestions(section, answers).map(({ q, required }) => {
           const key = `${section.id}.${q.id}`
-          const group = showGroups && q.group && <h2 key={`g-${key}`} className="question-group">{t(q.group)}</h2>
+          const group = showGroups && q.group && (
+            <div key={`g-${key}`} className="question-group">
+              <h2>{t(q.group)}</h2>
+              {q.groupNote && <p>{t(q.groupNote)}</p>}
+            </div>
+          )
           if (q.type === 'text') {
             return [group,
               <TextField
@@ -377,7 +382,7 @@ function RatingPage({ section, answers, patch, missing }: Ctx & { section: Ratin
                 {value !== undefined && <span className="answered-badge"><Icon name="check" size={14} />{t(ui.answered)}</span>}
               </div>
               {q.type === 'choice'
-                ? <ChoiceScale label={t(q.text)} value={answers.choices[key]} onChange={(v) => setChoice(key, v)} />
+                ? <ChoiceScale label={t(q.text)} options={q.options} value={answers.choices[key]} onChange={(v) => setChoice(key, v)} />
                 : <RatingScale label={t(q.text)} value={answers.ratings[key]} onChange={(v) => setRating(key, v)} />}
             </article>,
           ]

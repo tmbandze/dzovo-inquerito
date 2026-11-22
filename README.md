@@ -74,7 +74,8 @@ O mesmo `Codigo.gs` cria um menu **Inquérito** na Google Sheet (aparece ao abri
 - **Atualizar painel**: cria/atualiza o separador **Painel** (cartões com respostas, satisfação
   média, recomendação e NPS; médias por área e por pergunta; pontos fortes e a melhorar;
   comparação entre recintos e currículos; melhorias pedidas; quem respondeu; comentários) e o
-  separador **Painel Professores** (confidencial). Também arruma o aspeto das folhas de respostas.
+  separador **Painel Professores** (confidencial), e o separador **Painel Direção** (confidencial: o detalhe da liderança do Diretor,
+  com temas, comparação com anos anteriores e todos os comentários; no Painel geral a Direção só aparece como média). Também arruma o aspeto das folhas de respostas.
 - **Atualizar automaticamente (de hora a hora)**: liga a atualização automática.
 - **Apagar respostas de teste**: apaga as linhas com `TESTE` na coluna `edicao`.
 - **Apagar TODAS as respostas (recomeçar do zero)**: apaga os separadores Respostas e Professores

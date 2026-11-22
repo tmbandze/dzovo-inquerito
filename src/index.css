@@ -134,7 +134,9 @@ img { display: block; }
 .gate-card { margin-bottom: 14px; }
 .gate-note { display: flex; gap: 8px; align-items: flex-start; margin: 14px 0 0; padding: 12px 14px; border-radius: var(--radius-md); background: var(--navy-soft); color: var(--navy); font-size: .92rem; line-height: 1.45; }
 .gate-note .icon { flex: none; margin-top: 2px; }
-.question-group { margin: 18px 0 2px; color: var(--navy); font-size: 1.05rem; }
+.question-group { margin: 22px 0 2px; }
+.question-group h2 { color: var(--navy); font-size: 1.05rem; }
+.question-group p { margin-top: 4px; color: var(--muted); font-size: .9rem; }
 .field-error { display: flex; align-items: center; gap: 6px; margin-top: 10px; color: var(--orange-dark); font-size: .88rem; font-weight: 600; }
 .form-section.has-error .choice-card, .form-section.has-error .chip:not(.selected) { border-color: var(--orange); }
 

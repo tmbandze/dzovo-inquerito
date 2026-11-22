@@ -95,6 +95,7 @@ function json_(obj) {
 // Menu "Inquérito" → "Atualizar painel" cria ou atualiza:
 //   • "Painel"             — resultados gerais (para apresentar / exportar em PDF)
 //   • "Painel Professores" — resultados por professor (confidencial)
+//   • "Painel Direção"     — liderança do Diretor em detalhe (confidencial)
 // e arruma o aspeto das folhas Respostas e Professores.
 // Os filtros (recinto, currículo, classe, edição) escolhem-se no topo do Painel.
 // Se as perguntas do inquérito mudarem, atualizar AREAS, PERGUNTAS_PROF e DESENVOLVIMENTO.
@@ -102,6 +103,7 @@ function json_(obj) {
 
 const SHEET_PAINEL = 'Painel'
 const SHEET_PAINEL_PROF = 'Painel Professores'
+const SHEET_PAINEL_DIR = 'Painel Direção'
 const EMBLEMA_URL = 'https://tmbandze.github.io/dzovo-inquerito/emblema.png'
 const FONTE = 'Inter'
 const COR = {
@@ -111,7 +113,42 @@ const COR = {
   verdeSuave: '#dcfce7', ambarSuave: '#fef3c7', vermelhoSuave: '#fee2e2',
 }
 
-/** Nomes curtos das perguntas. As chaves são as colunas da folha Respostas. */
+/** Perguntas da Direção por tema (detalhe só no "Painel Direção", confidencial). */
+const GRUPOS_DIR = [
+  { nome: 'Relação com os pais', colunas: {
+    dir_acessivel: 'Acessível e ouve as preocupações',
+    dir_respeito: 'Trata os pais com respeito',
+    dir_resolve: 'Resolve os problemas em tempo útil',
+    dir_confianca: 'Confiança para uma situação séria',
+  } },
+  { nome: 'Comunicação e decisões', colunas: {
+    dir_decisoes: 'Comunica as decisões com clareza',
+    dir_explica: 'Explica as razões das mudanças',
+    dir_ouve_pais: 'Tem em conta a opinião dos pais',
+  } },
+  { nome: 'Trabalho em equipa com os professores', colunas: {
+    dir_ambiente: 'Bom ambiente com os professores',
+    dir_apoia_prof: 'Apoia e valoriza os professores',
+    dir_coerencia: 'Mensagem coerente com os professores',
+    dir_mudancas_prof: 'Mudanças de professores bem geridas',
+  } },
+  { nome: 'Rumo da escola', colunas: {
+    dir_rumo: 'Rumo claro e organizado',
+    dir_conflitos: 'Situações difíceis com calma e justiça',
+    dir_dir_geral: 'Satisfação geral',
+  } },
+]
+/** Comparação com anos anteriores (coluna dir_evolucao) e cor de cada resposta. */
+const OPCOES_EVOLUCAO = [['Melhorou', '#15803d'], ['Ficou igual', '#1c3a63'], ['Piorou', '#b91c1c'], ['Não sei', '#6b7280']]
+/** Respostas abertas sobre a Direção: só aparecem no Painel Direção. */
+const TEXTOS_DIRECAO = {
+  dir_dir_bem: 'O que fez bem',
+  dir_dir_mudar: 'O que fazer de forma diferente',
+  dir_situacao: 'Situação partilhada',
+}
+
+/** Nomes curtos das perguntas. As chaves são as colunas da folha Respostas.
+ *  confidencial: no Painel geral só aparece a média da área. */
 const AREAS = [
   { nome: 'Organização da escola', curto: 'Organização', colunas: {
     org_comunicacao: 'Comunicação com os pais',
@@ -129,12 +166,7 @@ const AREAS = [
     org_bullying: 'Prevenção do bullying',
     org_org_geral: 'Satisfação geral',
   } },
-  { nome: 'Direção', curto: 'Direção', colunas: {
-    dir_acessivel: 'Diretor acessível e ouve',
-    dir_resolve: 'Resolução de problemas',
-    dir_decisoes: 'Comunicação das decisões',
-    dir_dir_geral: 'Satisfação geral',
-  } },
+  { nome: 'Direção', curto: 'Direção', confidencial: true, colunas: Object.assign.apply(null, [{}].concat(GRUPOS_DIR.map(function (g) { return g.colunas }))) },
   { nome: 'Administração / Secretaria', curto: 'Administração', colunas: {
     adm_cordialidade: 'Cordialidade no atendimento',
     adm_rapidez: 'Rapidez no atendimento',
@@ -179,8 +211,6 @@ const TEXTOS_ABERTOS = {
   o_que_mais_gosta: 'O que mais gosta',
   como_melhorar: 'Como melhorar',
   comentarios_gerais: 'Comentário geral',
-  dir_dir_bem: 'Direção: o que faz bem',
-  dir_dir_mudar: 'Direção: o que mudar',
   adm_adm_comentario: 'Sobre a Administração',
   ec_ec_bem: 'Educação Cristã: o que correu bem',
   ec_ec_errado: 'Educação Cristã: o que mudar',
@@ -234,7 +264,7 @@ function aoAlterarFolha(e) {
   // linhas apagadas nos próprios painéis (ao redesenhar) não contam
   if (e.changeType === 'REMOVE_ROW') {
     const ativa = ss.getActiveSheet().getName()
-    if (ativa === SHEET_PAINEL || ativa === SHEET_PAINEL_PROF) return
+    if (ativa === SHEET_PAINEL || ativa === SHEET_PAINEL_PROF || ativa === SHEET_PAINEL_DIR) return
   }
   redesenhar_(ss)
 }
@@ -351,6 +381,7 @@ function desenharPaineis_(ss) {
   }
   desenharPainel_(painel, ctx)
   desenharPainelProf_(ss.getSheetByName(SHEET_PAINEL_PROF) || ss.insertSheet(SHEET_PAINEL_PROF, 1), ctx)
+  desenharPainelDir_(ss.getSheetByName(SHEET_PAINEL_DIR) || ss.insertSheet(SHEET_PAINEL_DIR, 2), ctx)
 }
 
 // ---------------------------------------------------------------------
@@ -683,10 +714,12 @@ function desenharPainel_(sh, ctx) {
     const e = estatisticaArea_(a, R, P)
     linhaNota_(g, a.nome, { media: e.media, satisfeitos: e.satisfeitos, n: e.pessoas })
   })
+  g.estilo('nota', a1_(g.linha({ 2: 'O detalhe da Direção está no separador "' + SHEET_PAINEL_DIR + '" (confidencial).' }, 22), 2))
 
   // pontos fortes e a melhorar
   const perguntas = []
   todasAreas.forEach(function (a) {
+    if (a.confidencial) return
     Object.keys(a.colunas).forEach(function (c) {
       if (/_geral$/.test(c)) return
       const e = estatistica_(a.professores ? P : R, [c])
@@ -752,6 +785,7 @@ function desenharPainel_(sh, ctx) {
 
   // detalhe por pergunta
   todasAreas.forEach(function (a) {
+    if (a.confidencial) return
     secao_(g, a.nome + ' — por pergunta', 8)
     cabecalho_(g, { 2: 'PERGUNTA', 3: 'MÉDIA', 7: 'SATISFEITOS', 8: 'RESPOSTAS' }, 8, 3)
     Object.keys(a.colunas).forEach(function (c) {
@@ -918,6 +952,118 @@ function desenharPainelProf_(sh, ctx) {
 }
 
 // ---------------------------------------------------------------------
+// Separador "Painel Direção" (confidencial)
+// ---------------------------------------------------------------------
+
+function desenharPainelDir_(sh, ctx) {
+  const R = ctx.respostas
+  const g = novaGrelha_(8)
+  const semGeral = function (cols) { return cols.filter(function (c) { return !/_geral$/.test(c) }) }
+
+  titulo_(g, 'Liderança da escola — Direção',
+    'CONFIDENCIAL — apenas para os responsáveis da escola  ·  ' + descreverFiltros_(ctx.filtros) + '  ·  atualizado em ' + atualizadoEm_(ctx), 8)
+  g.estilo('nota', a1_(g.linha({ 2: 'Os filtros escolhem-se no separador Painel. As respostas são anónimas; os comentários aparecem tal como foram escritos.' }, 22), 2))
+
+  const todas = colunasDe_(GRUPOS_DIR)
+  if (!estatistica_(R, todas).n) {
+    secao_(g, 'Ainda não há respostas sobre a Direção para estes filtros.', 8)
+    aplicarGrelha_(sh, g, [20, 260, 115, 115, 115, 115, 115, 115])
+    return
+  }
+
+  // resumo e temas
+  secao_(g, 'Resumo', 8)
+  cabecalho_(g, { 2: '', 3: 'MÉDIA', 7: 'SATISFEITOS', 8: 'RESPOSTAS' }, 8, 3)
+  linhaNota_(g, 'Satisfação geral com a Direção', estatistica_(R, ['dir_dir_geral']), true)
+  GRUPOS_DIR.forEach(function (gr) {
+    linhaNota_(g, gr.nome, estatistica_(R, semGeral(Object.keys(gr.colunas))))
+  })
+
+  // pontos fortes e a melhorar
+  const perguntas = semGeral(todas).map(function (c) {
+    return { rotulo: GRUPOS_DIR.reduce(function (r, gr) { return r || gr.colunas[c] }, ''), e: estatistica_(R, [c]) }
+  }).filter(function (p) { return p.e.n })
+  perguntas.sort(function (x, y) { return y.e.media - x.e.media })
+  const k = Math.min(3, Math.floor(perguntas.length / 2))
+  if (k > 0) {
+    secao_(g, 'Pontos mais fortes', 8)
+    cabecalho_(g, { 2: 'PERGUNTA', 3: 'MÉDIA', 7: 'SATISFEITOS', 8: 'RESPOSTAS' }, 8, 3)
+    perguntas.slice(0, k).forEach(function (p) { linhaNota_(g, p.rotulo, p.e) })
+    secao_(g, 'Pontos a melhorar', 8)
+    cabecalho_(g, { 2: 'PERGUNTA', 3: 'MÉDIA', 7: 'SATISFEITOS', 8: 'RESPOSTAS' }, 8, 3)
+    perguntas.slice(-k).reverse().forEach(function (p) { linhaNota_(g, p.rotulo, p.e) })
+  }
+
+  // comparação com anos anteriores
+  const evol = R.filter(function (r) { return String(r.dir_evolucao || '') !== '' })
+  if (evol.length) {
+    secao_(g, 'Comparando com anos anteriores, a liderança da escola…', 8)
+    cabecalho_(g, { 2: 'RESPOSTA', 3: 'PAIS', 7: '%' }, 8, 3)
+    OPCOES_EVOLUCAO.forEach(function (o) {
+      linhaContagem_(g, o[0], evol.filter(function (r) { return String(r.dir_evolucao) === o[0] }).length, evol.length, o[1])
+    })
+    g.estilo('nota', a1_(g.linha({ 2: 'Só respondem os pais com o educando na escola há mais de 1 ano.' }, 22), 2))
+  }
+
+  // por pergunta
+  GRUPOS_DIR.forEach(function (gr) {
+    secao_(g, gr.nome, 8)
+    cabecalho_(g, { 2: 'PERGUNTA', 3: 'MÉDIA', 7: 'SATISFEITOS', 8: 'RESPOSTAS' }, 8, 3)
+    Object.keys(gr.colunas).forEach(function (c) {
+      linhaNota_(g, gr.colunas[c], estatistica_(R, [c]), /_geral$/.test(c))
+    })
+  })
+
+  // comparação entre recintos e currículos
+  const grupos = []
+  ;['recinto', 'curriculo'].forEach(function (campo) {
+    const v = distintos_(R, campo)
+    if (v.length < 2) return
+    v.forEach(function (x) {
+      grupos.push({ nome: x.replace('Currículo ', ''), R: R.filter(function (r) { return String(r[campo]) === x }) })
+    })
+  })
+  if (grupos.length) {
+    const gs = [{ nome: 'Geral', R: R }].concat(grupos).slice(0, 6), ultimaG = 2 + gs.length
+    secao_(g, 'Comparação entre recintos e currículos', 8)
+    const cab = { 2: 'TEMA' }
+    gs.forEach(function (gr, i) { cab[3 + i] = gr.nome.toUpperCase() })
+    cabecalho_(g, cab, 8, 3)
+    GRUPOS_DIR.map(function (gr) { return [gr.nome, semGeral(Object.keys(gr.colunas))] })
+      .concat([['Satisfação geral', ['dir_dir_geral']]])
+      .forEach(function (linha) {
+        const v = { 2: linha[0] }
+        gs.forEach(function (gr, i) { v[3 + i] = estatistica_(gr.R, linha[1]).media })
+        const r = g.linha(v, 26)
+        g.estilo('linha', a1_(r, 2, 8)).estilo('media', a1_(r, 3, ultimaG))
+        g.gradientes.push(a1_(r, 3, ultimaG))
+      })
+  }
+
+  // comentários (todos, os mais recentes primeiro)
+  const tempo = function (d) { return d instanceof Date ? d.getTime() : 0 }
+  Object.keys(TEXTOS_DIRECAO).forEach(function (c) {
+    const lista = R.filter(function (r) { return String(r[c] || '').trim() })
+      .sort(function (a, b) { return tempo(b.data_hora) - tempo(a.data_hora) })
+    if (!lista.length) return
+    secao_(g, TEXTOS_DIRECAO[c] + ' (' + lista.length + ')', 8)
+    lista.forEach(function (r) {
+      const texto = String(r[c]).trim()
+      const meta = (r.data_hora instanceof Date ? Utilities.formatDate(r.data_hora, ctx.tz, 'dd/MM') + ' · ' : '') + r.recinto
+      const linha = g.linha({ 2: meta, 3: clean_(texto) }, Math.max(34, Math.ceil(texto.length / 95) * 17 + 14))
+      g.unir(a1_(linha, 3, 8))
+      g.estilo('meta', a1_(linha, 2)).estilo('quebra', a1_(linha, 2, 8)).estilo('linha', a1_(linha, 2, 8))
+    })
+  })
+
+  espaco_(g, 18)
+  g.estilo('rodape', a1_(g.linha({ 2: 'Notas de 1 (muito insatisfeito) a 5 (muito satisfeito). "Satisfeitos" = notas 4 e 5. "Não sei" não entra nas contas.' }, 18), 2))
+  g.estilo('rodape', a1_(g.linha({ 2: 'As perguntas novas deste ano só contam as respostas dadas depois de terem sido acrescentadas ao inquérito.' }, 18), 2))
+
+  aplicarGrelha_(sh, g, [20, 260, 115, 115, 115, 115, 115, 115])
+}
+
+// ---------------------------------------------------------------------
 // Aspeto das folhas Respostas e Professores
 // (os cabeçalhos não mudam: são os nomes que o doPost usa)
 // ---------------------------------------------------------------------
@@ -927,8 +1073,8 @@ function formatarFolhaDados_(sh) {
   const nc = sh.getLastColumn(), nl = Math.max(sh.getMaxRows() - 1, 1)
   const cab = sh.getRange(1, 1, 1, nc).getValues()[0]
   const escala = colunasDe_(AREAS).concat(Object.keys(PERGUNTAS_PROF))
-  const opcoes = Object.keys(DESENVOLVIMENTO)
-  const textoLongo = Object.keys(TEXTOS_ABERTOS).concat(['melhorias_prioritarias', 'contacto_assunto', 'comentario'])
+  const opcoes = Object.keys(DESENVOLVIMENTO).concat(['ec_familia', 'dir_evolucao'])
+  const textoLongo = Object.keys(TEXTOS_ABERTOS).concat(Object.keys(TEXTOS_DIRECAO), ['melhorias_prioritarias', 'contacto_assunto', 'comentario'])
   const coluna = function (i) { return letra_(i + 1) + '2:' + letra_(i + 1) + (nl + 1) }
 
   sh.setHiddenGridlines(true)

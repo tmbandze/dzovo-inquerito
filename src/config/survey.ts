@@ -124,6 +124,12 @@ export type Question = {
   placeholder?: Text
   /** Título que aparece antes desta pergunta, para separar partes da secção */
   group?: Text
+  /** Texto curto por baixo do título do grupo */
+  groupNote?: Text
+  /** Só para 'choice': opções próprias (por defeito CHOICE_OPTIONS) */
+  options?: Option[]
+  /** Só aparece se o educando estiver na escola há pelo menos DURATION_OPTIONS[n] */
+  minDuration?: number
   /** Secções com pergunta de entrada (gate): esta pergunta aparece também a quem
    *  não responde "sim" à entrada, mas aí é sempre opcional. */
   forAll?: boolean
@@ -177,23 +183,72 @@ export const DIRECAO: RatingSection = {
   eyebrow: { pt: 'Liderança', en: 'Leadership' },
   title: { pt: 'Direção da escola', en: 'School leadership' },
   subtitle: {
-    pt: 'Na pessoa do Diretor da escola. São poucas perguntas: queremos sobretudo ouvir a sua opinião, escrita por si.',
-    en: 'Thinking of the Head of School. Just a few questions: above all, we want to hear your opinion in your own words.',
+    pt: 'Sobre a liderança do Diretor este ano. As respostas são anónimas e ajudam os responsáveis da escola a apoiar a Direção e a planear o próximo ano. Responda só ao que conhece; se não souber, escolha «Não sei».',
+    en: "About the Head of School's leadership this year. Answers are anonymous and help those responsible for the school to support the leadership and plan next year. Only answer what you know; if you don't know, choose «Don't know».",
   },
   questions: [
-    { id: 'acessivel', type: 'scale', required: true, text: { pt: 'O Diretor é acessível e ouve as minhas preocupações', en: 'The Head is approachable and listens to my concerns' } },
+    // Os ids que já existiam (acessivel, resolve, decisoes, dir_geral, dir_bem, dir_mudar) não mudam:
+    // são as colunas onde já há respostas.
+    {
+      id: 'acessivel', type: 'scale', required: true,
+      group: { pt: 'Relação com os pais', en: 'Relationship with parents' },
+      text: { pt: 'O Diretor é acessível e ouve as minhas preocupações', en: 'The Head is approachable and listens to my concerns' },
+    },
+    { id: 'respeito', type: 'scale', required: true, text: { pt: 'Trata os pais com respeito e cordialidade', en: 'Treats parents with respect and courtesy' } },
     { id: 'resolve', type: 'scale', required: true, text: { pt: 'Os problemas apresentados à Direção são resolvidos em tempo útil', en: 'Problems raised with the leadership are resolved in good time' } },
-    { id: 'decisoes', type: 'scale', required: true, text: { pt: 'As decisões importantes são comunicadas aos pais com clareza', en: 'Important decisions are communicated clearly to parents' } },
-    { id: 'dir_geral', type: 'scale', required: true, text: { pt: 'Satisfação geral com a Direção', en: 'Overall satisfaction with the leadership' } },
+    { id: 'confianca', type: 'scale', required: true, text: { pt: 'Confio na Direção para resolver bem uma situação séria com o meu educando', en: 'I trust the leadership to handle a serious situation with my child well' } },
+
+    {
+      id: 'decisoes', type: 'scale', required: true,
+      group: { pt: 'Comunicação e decisões', en: 'Communication and decisions' },
+      text: { pt: 'As decisões importantes são comunicadas aos pais com clareza', en: 'Important decisions are communicated clearly to parents' },
+    },
+    { id: 'explica', type: 'scale', required: true, text: { pt: 'Quando há mudanças, a Direção explica as razões', en: 'When things change, the leadership explains why' } },
+    { id: 'ouve_pais', type: 'scale', required: true, text: { pt: 'A opinião dos pais é tida em conta nas decisões da escola', en: "Parents' views are taken into account in school decisions" } },
+
+    {
+      id: 'ambiente', type: 'scale', required: true,
+      group: { pt: 'Trabalho em equipa com os professores', en: 'Teamwork with teachers' },
+      groupNote: { pt: 'Pelo que observa ou ouve como encarregado de educação.', en: 'From what you see or hear as a parent.' },
+      text: { pt: 'Existe um bom ambiente de trabalho entre a Direção e os professores', en: 'There is a good working relationship between the leadership and the teachers' },
+    },
+    { id: 'apoia_prof', type: 'scale', required: true, text: { pt: 'A Direção apoia os professores e valoriza o seu trabalho', en: "The leadership supports the teachers and values their work" } },
+    { id: 'coerencia', type: 'scale', required: true, text: { pt: 'Direção e professores transmitem aos pais uma mensagem coerente', en: 'The leadership and teachers give parents a consistent message' } },
+    { id: 'mudancas_prof', type: 'scale', required: true, text: { pt: 'As mudanças de professores durante o ano foram bem geridas e comunicadas', en: 'Changes of teachers during the year were well managed and communicated' } },
+
+    {
+      id: 'rumo', type: 'scale', required: true,
+      group: { pt: 'Rumo da escola', en: "The school's direction" },
+      text: { pt: 'A escola teve um rumo claro e bem organizado este ano', en: 'The school had a clear, well-organised direction this year' },
+    },
+    { id: 'conflitos', type: 'scale', required: true, text: { pt: 'As situações difíceis foram tratadas com calma e justiça', en: 'Difficult situations were handled calmly and fairly' } },
+    { id: 'dir_geral', type: 'scale', required: true, text: { pt: 'Satisfação geral com a Direção este ano', en: 'Overall satisfaction with the leadership this year' } },
+    {
+      id: 'evolucao', type: 'choice', required: true, minDuration: 1,
+      text: { pt: 'Comparando com anos anteriores, a liderança da escola…', en: "Compared with previous years, the school's leadership has…" },
+      options: [
+        { id: 'melhorou', text: { pt: 'Melhorou', en: 'Improved' } },
+        { id: 'igual', text: { pt: 'Ficou igual', en: 'Stayed the same' } },
+        { id: 'piorou', text: { pt: 'Piorou', en: 'Got worse' } },
+        { id: 'ns', text: { pt: 'Não sei', en: "Don't know" } },
+      ],
+    },
+
     {
       id: 'dir_bem', type: 'text',
-      text: { pt: 'Na sua opinião, o que a Direção está a fazer bem?', en: 'In your opinion, what is the leadership doing well?' },
+      group: { pt: 'A sua opinião', en: 'Your opinion' },
+      text: { pt: 'O que a Direção fez bem este ano?', en: 'What did the leadership do well this year?' },
       placeholder: { pt: 'Escreva à vontade, com as suas palavras…', en: 'Write freely, in your own words…' },
     },
     {
       id: 'dir_mudar', type: 'text',
-      text: { pt: 'O que gostaria que a Direção mudasse ou melhorasse?', en: 'What would you like the leadership to change or improve?' },
-      placeholder: { pt: 'Todas as opiniões são lidas pela Direção…', en: 'Every opinion is read by the leadership…' },
+      text: { pt: 'O que gostaria que a Direção fizesse de forma diferente no próximo ano?', en: 'What would you like the leadership to do differently next year?' },
+      placeholder: { pt: 'Uma sugestão concreta ajuda mais do que uma crítica geral…', en: 'A concrete suggestion helps more than a general criticism…' },
+    },
+    {
+      id: 'situacao', type: 'text',
+      text: { pt: 'Houve alguma situação este ano com a Direção que queira partilhar? Conte o que aconteceu e como foi resolvida.', en: 'Was there a situation with the leadership this year that you would like to share? Tell us what happened and how it was resolved.' },
+      placeholder: { pt: 'Não precisa de dizer nomes…', en: 'There is no need to mention names…' },
     },
   ],
 }

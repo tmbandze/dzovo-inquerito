@@ -81,7 +81,7 @@ const html = `<!doctype html>
 
   <div class="facts">
     <span class="fact">${svg(icon.lock)} Anónimo</span>
-    <span class="fact">${svg(icon.clock)} Cerca de 10 minutos</span>
+    <span class="fact">${svg(icon.clock)} Cerca de 12 minutos</span>
     <span class="fact">${svg(icon.phone)} Português ou English</span>
   </div>
 
