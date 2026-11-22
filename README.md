@@ -76,8 +76,9 @@ O mesmo `Codigo.gs` cria um menu **Inquérito** na Google Sheet (aparece ao abri
   comparação entre recintos e currículos; melhorias pedidas; quem respondeu; comentários) e o
   separador **Painel Professores** (confidencial), e o separador **Painel Direção** (confidencial: o detalhe da liderança do Diretor,
   com temas, comparação com anos anteriores e todos os comentários; no Painel geral a Direção só aparece como média). Também arruma o aspeto das folhas de respostas.
-- **Criar PDF para imprimir**: atualiza os painéis e mostra os links para os PDFs em A4 (Painel, Painel Direção e
-  Painel Professores, este último com a folha deitada). As colunas estão feitas à medida do A4, por isso a letra
+- **Criar PDF para imprimir**: atualiza os painéis, cria os PDFs em A4 (Painel, Painel Direção e Painel Professores,
+  este último com a folha deitada) na pasta **Relatórios do Inquérito** do Google Drive, ao lado da folha, e mostra
+  os links para os abrir e imprimir. Na primeira vez o Google pede autorização para o script usar o Drive. As colunas estão feitas à medida do A4, por isso a letra
   sai no tamanho real (pelo menos 10 pt) e as secções que cabem numa página não ficam partidas.
 - **Atualizar automaticamente (de hora a hora)**: liga a atualização automática.
 - **Apagar respostas de teste**: apaga as linhas com `TESTE` na coluna `edicao`.

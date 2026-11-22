@@ -8,7 +8,8 @@
  *
  * Instalação: ver README do projeto (secção "Ligar à Google Sheet").
  *
- * @OnlyCurrentDoc
+ * Autorizações: ler e escrever nesta folha, e criar os PDFs dos relatórios no Google Drive
+ * de quem usa o menu "Criar PDF para imprimir" (pasta "Relatórios do Inquérito").
  */
 
 const SHEET_RESPOSTAS = 'Respostas'
@@ -390,24 +391,28 @@ function desenharPaineis_(ss) {
   desenharPainelDir_(ss.getSheetByName(SHEET_PAINEL_DIR) || ss.insertSheet(SHEET_PAINEL_DIR, 2), ctx)
 }
 
+const PASTA_RELATORIOS = 'Relatórios do Inquérito'
+
 /**
- * Atualiza os painéis e mostra os links para os PDFs (A4, letra a 100%).
- * Os PDFs são gerados pelo Google a partir de cada separador; abrem-se com a conta
- * de quem clica, por isso não é preciso dar nenhuma autorização nova.
+ * Atualiza os painéis, cria os PDFs (A4, letra a 100%) na pasta "Relatórios do Inquérito"
+ * do Google Drive e mostra os links. Os links abrem o visualizador do Google (com o botão
+ * de imprimir): uma transferência direta a partir desta janela é bloqueada pelo Chrome.
  */
 function criarPdfs() {
   const ss = SpreadsheetApp.getActiveSpreadsheet()
+  ss.toast('A atualizar os painéis e a criar os PDFs… (pode demorar meio minuto)', 'Inquérito', 60)
   const lock = LockService.getScriptLock()
   lock.waitLock(30000)
   try {
-    atualizaPaineisParaImprimir_(ss)
+    desenharPaineis_(ss)
+    SpreadsheetApp.flush()
   } finally {
     lock.releaseLock()
   }
-  const base = 'https://docs.google.com/spreadsheets/d/' + ss.getId() + '/export?format=pdf&size=A4&fitw=true' +
-    '&left_margin=' + A4.margemLado + '&right_margin=' + A4.margemLado + '&top_margin=' + A4.margemTopo + '&bottom_margin=' + A4.margemTopo +
-    '&gridlines=false&printtitle=false&sheetnames=false&pagenum=CENTER&horizontal_alignment=CENTER&fzr=false'
+
   const filtros = descreverFiltros_(lerFiltros_(ss.getSheetByName(SHEET_PAINEL)))
+  const quando = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd HH.mm')
+  const pasta = pastaRelatorios_(ss)
   const itens = [
     [SHEET_PAINEL, 'Resultados gerais', true, ''],
     [SHEET_PAINEL_DIR, 'Liderança da escola', true, 'confidencial'],
@@ -415,21 +420,49 @@ function criarPdfs() {
   ].map(function (i) {
     const sh = ss.getSheetByName(i[0])
     if (!sh) return ''
-    const url = base + '&portrait=' + i[2] + '&gid=' + sh.getSheetId()
-    return '<a href="' + url + '" target="_blank"><b>' + i[1] + '</b><span>' + i[0] + (i[3] ? ' · ' + i[3] : '') + '</span></a>'
+    try {
+      const pdf = exportarPdf_(ss, sh, i[2]).setName(i[1] + ' — ' + quando + '.pdf')
+      const ficheiro = pasta.createFile(pdf)
+      return '<a href="' + ficheiro.getUrl() + '" target="_blank"><b>' + i[1] + '</b><span>' + i[0] + (i[3] ? ' · ' + i[3] : '') + '</span></a>'
+    } catch (err) {
+      console.error('PDF não criado (' + i[0] + '): ' + err)
+      return '<div class="erro"><b>' + i[1] + '</b><span>Não foi possível criar o PDF: ' + String(err).replace(/</g, '&lt;') + '</span></div>'
+    }
   }).join('')
+
   const html = '<style>body{font-family:Arial,sans-serif;color:#1f2937;margin:0}p{margin:0 0 12px;font-size:14px;line-height:1.45}' +
-    'a{display:block;margin:0 0 10px;padding:12px 14px;border:1px solid #dbe2ea;border-radius:10px;color:#1c3a63;text-decoration:none}' +
-    'a:hover{background:#e8eef6}b{display:block;font-size:15px}span{font-size:13px;color:#6b7280}</style>' +
+    'a,.erro{display:block;margin:0 0 10px;padding:12px 14px;border:1px solid #dbe2ea;border-radius:10px;color:#1c3a63;text-decoration:none}' +
+    'a:hover{background:#e8eef6}.erro{border-color:#fecaca;background:#fee2e2;color:#b91c1c}b{display:block;font-size:15px}span{font-size:13px;color:#6b7280}</style>' +
     '<p>Filtros: <b style="display:inline">' + filtros + '</b>. Para mudar, escolha no topo do separador Painel e volte a este menu.</p>' +
-    '<p>Clique para abrir o PDF e imprima (Ctrl+P). Os confidenciais são só para os responsáveis da escola.</p>' + itens
-  SpreadsheetApp.getUi().showModalDialog(HtmlService.createHtmlOutput(html).setWidth(420).setHeight(360), 'PDF para imprimir')
+    '<p>Clique para abrir o PDF e use o botão de imprimir. Ficam guardados no Google Drive, na pasta <b style="display:inline">' + PASTA_RELATORIOS + '</b>. ' +
+    'Os confidenciais são só para os responsáveis da escola.</p>' + itens
+  SpreadsheetApp.getUi().showModalDialog(HtmlService.createHtmlOutput(html).setWidth(440).setHeight(400), 'PDF para imprimir')
 }
 
-function atualizaPaineisParaImprimir_(ss) {
-  desenharPaineis_(ss)
-  SpreadsheetApp.flush()
+/** PDF de um separador, pedido ao Google com a conta de quem usa o menu. */
+function exportarPdf_(ss, sh, aoAlto) {
+  const url = 'https://docs.google.com/spreadsheets/d/' + ss.getId() + '/export?format=pdf&size=A4&fitw=true' +
+    '&portrait=' + aoAlto + '&gid=' + sh.getSheetId() +
+    '&left_margin=' + A4.margemLado + '&right_margin=' + A4.margemLado + '&top_margin=' + A4.margemTopo + '&bottom_margin=' + A4.margemTopo +
+    '&gridlines=false&printtitle=false&sheetnames=false&pagenum=CENTER&horizontal_alignment=CENTER&fzr=false'
+  const pedido = { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true }
+  // O Google limita pedidos seguidos: se recusar, espera e tenta outra vez
+  for (let tentativa = 1; ; tentativa++) {
+    const res = UrlFetchApp.fetch(url, pedido)
+    if (res.getResponseCode() === 200) return res.getBlob()
+    if (tentativa >= 3) throw new Error('o Google respondeu ' + res.getResponseCode())
+    Utilities.sleep(3000 * tentativa)
+  }
 }
+
+/** Pasta "Relatórios do Inquérito" ao lado desta folha no Drive (criada na primeira vez). */
+function pastaRelatorios_(ss) {
+  const pais = DriveApp.getFileById(ss.getId()).getParents()
+  const pai = pais.hasNext() ? pais.next() : DriveApp.getRootFolder()
+  const existentes = pai.getFoldersByName(PASTA_RELATORIOS)
+  return existentes.hasNext() ? existentes.next() : pai.createFolder(PASTA_RELATORIOS)
+}
+
 
 // ---------------------------------------------------------------------
 // Leitura e contas
