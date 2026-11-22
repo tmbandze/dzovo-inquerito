@@ -3,7 +3,7 @@
  * Recebe as respostas do site e grava-as nesta Google Sheet.
  *
  * Folhas criadas automaticamente:
- *   • "Respostas"   — uma linha por resposta (organização, direção, administração, melhorias, comentários)
+ *   • "Respostas"   — uma linha por resposta (organização, direção, administração, educação cristã, melhorias, comentários)
  *   • "Professores" — uma linha por professor avaliado (liga-se à resposta pela coluna id_resposta)
  *
  * Instalação: ver README do projeto (secção "Ligar à Google Sheet").
@@ -97,7 +97,7 @@ function json_(obj) {
 //   • "Painel Professores" — resultados por professor (confidencial)
 // e arruma o aspeto das folhas Respostas e Professores.
 // Os filtros (recinto, currículo, classe, edição) escolhem-se no topo do Painel.
-// Se as perguntas do inquérito mudarem, atualizar AREAS e PERGUNTAS_PROF.
+// Se as perguntas do inquérito mudarem, atualizar AREAS, PERGUNTAS_PROF e DESENVOLVIMENTO.
 // =====================================================================
 
 const SHEET_PAINEL = 'Painel'
@@ -143,7 +143,26 @@ const AREAS = [
     adm_contacto: 'Facilidade de contacto',
     adm_adm_geral: 'Satisfação geral',
   } },
+  { nome: 'Educação Cristã', curto: 'Educação Cristã', colunas: {
+    ec_aulas: 'Aulas de Estudos Bíblicos',
+    ec_idade: 'Temas adequados à idade',
+    ec_informa: 'Informação sobre o que é ensinado',
+    ec_momentos: 'Momentos de oração e devocionais',
+    ec_respeito: 'Respeito pela fé de cada família',
+    ec_geral: 'Satisfação geral',
+  } },
 ]
+
+/** Educação Cristã: o que os pais notaram no educando (Sim, muito / Um pouco / Não notei / Não sei). */
+const DESENVOLVIMENTO = {
+  ec_dev_fala: 'Fala em casa do que aprende',
+  ec_dev_conhece: 'Conhece mais histórias, orações e versículos',
+  ec_dev_valores: 'Mais respeito, partilha, perdão e responsabilidade',
+  ec_dev_gosta: 'Gosta das aulas e da oração',
+}
+const OPCOES_DEV = ['Sim, muito', 'Um pouco', 'Não notei', 'Não sei']
+/** Pergunta de entrada da Educação Cristã (coluna ec_familia). */
+const OPCOES_FAMILIA = ['Sim', 'Não', 'Prefiro não dizer']
 
 /** Colunas da folha Professores. */
 const PERGUNTAS_PROF = {
@@ -163,6 +182,9 @@ const TEXTOS_ABERTOS = {
   dir_dir_bem: 'Direção: o que faz bem',
   dir_dir_mudar: 'Direção: o que mudar',
   adm_adm_comentario: 'Sobre a Administração',
+  ec_ec_bem: 'Educação Cristã: o que correu bem',
+  ec_ec_errado: 'Educação Cristã: o que mudar',
+  ec_ec_obs: 'Educação Cristã: observações',
   melhoria_outro: 'Outra melhoria',
 }
 const TEMPOS = ['Menos de 1 ano', '1–2 anos', '3–4 anos', '5 anos ou mais']
@@ -737,6 +759,40 @@ function desenharPainel_(sh, ctx) {
     })
   })
 
+  // educação cristã: o que os pais notaram no educando
+  const dev = Object.keys(DESENVOLVIMENTO).map(function (c) {
+    const conta = OPCOES_DEV.map(function (o) { return R.filter(function (r) { return String(r[c]) === o }).length })
+    return { rotulo: DESENVOLVIMENTO[c], conta: conta, n: conta.reduce(function (a, b) { return a + b }, 0) }
+  }).filter(function (d) { return d.n })
+  // educação cristã: famílias cristãs / não cristãs e o respeito pela fé de cada uma
+  const familias = distintos_(R.filter(function (r) { return r.ec_familia !== undefined }), 'ec_familia', OPCOES_FAMILIA)
+  if (familias.length) {
+    secao_(g, 'Educação Cristã — a família é cristã?', 8)
+    cabecalho_(g, { 2: 'RESPOSTA', 3: 'PAIS', 7: '%' }, 8, 3)
+    const nFam = R.filter(function (r) { return String(r.ec_familia || '') !== '' }).length
+    familias.forEach(function (f) {
+      linhaContagem_(g, f, R.filter(function (r) { return String(r.ec_familia) === f }).length, nFam)
+    })
+    g.estilo('subsecao', a1_(g.linha({ 2: 'Respeito pela fé de cada família, por grupo' }, 26), 2))
+    cabecalho_(g, { 2: 'GRUPO', 3: 'MÉDIA', 7: 'SATISFEITOS', 8: 'RESPOSTAS' }, 8, 3)
+    familias.forEach(function (f) {
+      linhaNota_(g, f, estatistica_(R.filter(function (r) { return String(r.ec_familia) === f }), ['ec_respeito']))
+    })
+    g.estilo('nota', a1_(g.linha({ 2: 'Só as famílias que responderam "Sim" veem as perguntas sobre as aulas; as outras podem responder ao respeito pela fé e deixar observações.' }, 22), 2))
+  }
+  if (dev.length) {
+    secao_(g, 'Educação Cristã — o que os pais notaram no educando', 8)
+    cabecalho_(g, { 2: 'PERGUNTA', 3: 'SIM, MUITO', 4: 'UM POUCO', 5: 'NÃO NOTEI', 6: 'NÃO SEI', 7: 'NOTARAM', 8: 'RESPOSTAS' }, 8, 3)
+    dev.forEach(function (d) {
+      const sabem = d.n - d.conta[3]
+      const v = { 2: d.rotulo, 7: sabem ? (d.conta[0] + d.conta[1]) / sabem : '', 8: d.n }
+      d.conta.forEach(function (x, i) { v[3 + i] = x / d.n })
+      const r = g.linha(v, 26)
+      g.estilo('linha', a1_(r, 2, 8)).estilo('pct', a1_(r, 3, 7)).estilo('forte', a1_(r, 7)).estilo('centro', a1_(r, 8))
+    })
+    g.estilo('nota', a1_(g.linha({ 2: '"Notaram" = Sim, muito + Um pouco, sem contar quem respondeu "Não sei". Filtre por classe ou recinto no topo.' }, 22), 2))
+  }
+
   // melhorias prioritárias
   const votos = {}
   R.forEach(function (r) {
@@ -871,6 +927,7 @@ function formatarFolhaDados_(sh) {
   const nc = sh.getLastColumn(), nl = Math.max(sh.getMaxRows() - 1, 1)
   const cab = sh.getRange(1, 1, 1, nc).getValues()[0]
   const escala = colunasDe_(AREAS).concat(Object.keys(PERGUNTAS_PROF))
+  const opcoes = Object.keys(DESENVOLVIMENTO)
   const textoLongo = Object.keys(TEXTOS_ABERTOS).concat(['melhorias_prioritarias', 'contacto_assunto', 'comentario'])
   const coluna = function (i) { return letra_(i + 1) + '2:' + letra_(i + 1) + (nl + 1) }
 
@@ -882,12 +939,13 @@ function formatarFolhaDados_(sh) {
     .setWrap(true).setHorizontalAlignment('center')
   sh.setRowHeight(1, 42)
 
-  const notas = [], rec = [], longos = [], ids = []
+  const notas = [], rec = [], longos = [], ids = [], centro = []
   cab.forEach(function (h, i) {
     let largura = 130
     if (h === 'data_hora') { largura = 125; sh.getRange(coluna(i)).setNumberFormat('dd/mm/yyyy hh:mm') }
     else if (h === 'id_resposta') { largura = 80; ids.push(coluna(i)) }
     else if (escala.indexOf(h) !== -1) { largura = 72; notas.push(coluna(i)) }
+    else if (opcoes.indexOf(h) !== -1) { largura = 95; centro.push(coluna(i)) }
     else if (h === 'recomendacao_0_10') { largura = 90; rec.push(coluna(i)) }
     else if (textoLongo.indexOf(h) !== -1) { largura = 260; longos.push(coluna(i)) }
     sh.setColumnWidth(i + 1, largura)
@@ -895,6 +953,7 @@ function formatarFolhaDados_(sh) {
   if (ids.length) sh.getRangeList(ids).setFontSize(8).setFontColor(COR.cinza)
   if (notas.length) sh.getRangeList(notas).setHorizontalAlignment('center')
   if (rec.length) sh.getRangeList(rec).setHorizontalAlignment('center')
+  if (centro.length) sh.getRangeList(centro).setHorizontalAlignment('center')
   if (longos.length) sh.getRangeList(longos).setWrap(true)
 
   const corpo = sh.getRange(2, 1, nl, nc)

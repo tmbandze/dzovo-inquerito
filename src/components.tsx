@@ -1,6 +1,6 @@
-import { createContext, useContext, type ReactNode } from 'react'
+import { createContext, useContext, type KeyboardEvent, type ReactNode } from 'react'
 import { ui, type Lang } from './i18n'
-import type { Text } from './config/survey'
+import { CHOICE_OPTIONS, type Option, type Text } from './config/survey'
 import type { Rating } from './state'
 
 // ---------------------------------------------------------------------
@@ -10,6 +10,27 @@ export const LangContext = createContext<{ lang: Lang; setLang: (l: Lang) => voi
 export function useT() {
   const { lang } = useContext(LangContext)
   return (text: Text) => text[lang]
+}
+
+// ---------------------------------------------------------------------
+// Grupos de opções (role="radiogroup") com o comportamento de teclado normal:
+// Tab entra no grupo pela opção escolhida (ou pela primeira); as setas,
+// Home e End mudam a escolha.
+// ---------------------------------------------------------------------
+export function rovingRadio<T>(values: T[], current: T | undefined, onChange: (v: T) => void) {
+  const active = values.includes(current as T) ? current : values[0]
+  const onKeyDown = (e: KeyboardEvent<HTMLElement>) => {
+    const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key]
+    if (step === undefined && e.key !== 'Home' && e.key !== 'End') return
+    const radios = [...e.currentTarget.querySelectorAll<HTMLElement>('[role="radio"]')]
+    const from = radios.indexOf(e.target as HTMLElement)
+    if (from === -1) return
+    e.preventDefault()
+    const to = e.key === 'Home' ? 0 : e.key === 'End' ? values.length - 1 : (from + step! + values.length) % values.length
+    onChange(values[to])
+    radios[to]?.focus()
+  }
+  return { onKeyDown, tabIndex: (v: T) => (v === active ? 0 : -1) }
 }
 
 // ---------------------------------------------------------------------
@@ -123,14 +144,16 @@ export function RatingScale({
   value, onChange, compact = false, label,
 }: { value?: Rating; onChange: (v: Rating) => void; compact?: boolean; label: string }) {
   const t = useT()
+  const radio = rovingRadio<Rating>([1, 2, 3, 4, 5], value, onChange)
   return (
     <div className={`rating-wrap ${compact ? 'compact' : ''}`}>
-      <div className="rating-scale" role="radiogroup" aria-label={label}>
+      <div className="rating-scale" role="radiogroup" aria-label={label} onKeyDown={radio.onKeyDown}>
         {[1, 2, 3, 4, 5].map((n) => (
           <button
             key={n}
             type="button"
             role="radio"
+            tabIndex={radio.tabIndex(n)}
             aria-checked={value === n}
             className={value === n ? 'selected' : ''}
             onClick={() => onChange(n)}
@@ -148,6 +171,31 @@ export function RatingScale({
         <span className="mini-check">{value === 'NS' && <Icon name="check" size={13} />}</span>
         {t(ui.dontKnow)}
       </button>
+    </div>
+  )
+}
+
+/** Escolha de uma opção (por defeito CHOICE_OPTIONS: Sim, muito / Um pouco / Não notei / Não sei). */
+export function ChoiceScale({
+  value, onChange, label, options = CHOICE_OPTIONS, stack = false,
+}: { value?: string; onChange: (v: string) => void; label: string; options?: Option[]; stack?: boolean }) {
+  const t = useT()
+  const radio = rovingRadio(options.map((o) => o.id), value, onChange)
+  return (
+    <div className={`chip-list choice-scale ${stack ? 'stack' : ''}`} role="radiogroup" aria-label={label} onKeyDown={radio.onKeyDown}>
+      {options.map((o) => (
+        <button
+          key={o.id}
+          type="button"
+          role="radio"
+          tabIndex={radio.tabIndex(o.id)}
+          aria-checked={value === o.id}
+          className={`chip ${value === o.id ? 'selected' : ''} ${o.id === 'ns' || o.id === 'pnd' ? 'muted' : ''}`}
+          onClick={() => onChange(o.id)}
+        >
+          {t(o.text)}
+        </button>
+      ))}
     </div>
   )
 }

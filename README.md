@@ -22,7 +22,8 @@ Telemóvel do encarregado ──► Site (GitHub Pages) ──► Apps Script �
 
 ## Funcionalidades
 
-- 7 secções: Identificação · Organização · Direção · Administração · Professores · Melhorias · Comentários finais
+- 8 secções: Identificação · Organização · Direção · Administração · Professores · Educação Cristã · Melhorias · Comentários finais
+- Educação Cristã (Estudos Bíblicos): começa por "A sua família é cristã?" (Sim / Não / Prefiro não dizer). Só quem responde Sim vê a avaliação das aulas, o que os pais notaram no educando (Sim, muito / Um pouco / Não notei / Não sei) e os comentários; as outras famílias podem avaliar o respeito pela sua fé e deixar observações (opcional)
 - O encarregado escolhe a **classe** (o recinto Dzovo 1 / Dzovo 2 sai daí) e o currículo: **Bilingue** (Nacional e Cambridge), **Full Cambridge** ou **Nacional**; aparecem só os professores que dão aulas ao educando
 - Português / Inglês em todo o inquérito
 - Validação: as perguntas obrigatórias ficam destacadas e o ecrã desloca-se até elas

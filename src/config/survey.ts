@@ -111,23 +111,41 @@ export const TEACHERS: Teacher[] = [
 // Perguntas
 // ---------------------------------------------------------------------
 // Tipos:  'scale' = escala 1–5 com "Não sei / Não se aplica"
+//         'choice' = uma das opções de CHOICE_OPTIONS (Sim, muito / Um pouco / …)
 //         'text'  = resposta aberta
 // required: true → o encarregado tem de responder (ou marcar "Não sei")
 
 export type Question = {
   id: string
-  type: 'scale' | 'text'
+  type: 'scale' | 'choice' | 'text'
   text: Text
   required?: boolean
   /** Só para 'text': texto de ajuda dentro da caixa */
   placeholder?: Text
+  /** Título que aparece antes desta pergunta, para separar partes da secção */
+  group?: Text
+  /** Secções com pergunta de entrada (gate): esta pergunta aparece também a quem
+   *  não responde "sim" à entrada, mas aí é sempre opcional. */
+  forAll?: boolean
 }
+
+export type Option = { id: string; text: Text }
+
+/** Opções das perguntas 'choice'. O texto em português é o que fica gravado na folha. */
+export const CHOICE_OPTIONS: Option[] = [
+  { id: 'muito', text: { pt: 'Sim, muito', en: 'Yes, a lot' } },
+  { id: 'pouco', text: { pt: 'Um pouco', en: 'A little' } },
+  { id: 'nao', text: { pt: 'Não notei', en: "I haven't noticed" } },
+  { id: 'ns', text: { pt: 'Não sei', en: "Don't know" } },
+]
 
 export type RatingSection = {
   id: string
   eyebrow: Text
   title: Text
   subtitle: Text
+  /** Pergunta de entrada: só quem escolhe a opção "open" vê a secção toda. */
+  gate?: { id: string; text: Text; options: Option[]; open: string; closedNote: Text }
   questions: Question[]
 }
 
@@ -196,6 +214,60 @@ export const ADMINISTRACAO: RatingSection = {
   ],
 }
 
+export const EDUCACAO_CRISTA: RatingSection = {
+  id: 'ec',
+  eyebrow: { pt: 'Estudos Bíblicos', en: 'Bible Study' },
+  title: { pt: 'Educação Cristã', en: 'Christian Education' },
+  subtitle: {
+    pt: 'Sobre os Estudos Bíblicos (Bible Study) deste ano. Se a sua família não é cristã, não precisa de responder às perguntas sobre as aulas.',
+    en: "About this year's Bible Study. If your family is not Christian, you do not need to answer the questions about the lessons.",
+  },
+  gate: {
+    id: 'familia',
+    text: { pt: 'A sua família é cristã?', en: 'Is your family Christian?' },
+    options: [
+      { id: 'sim', text: { pt: 'Sim', en: 'Yes' } },
+      { id: 'nao', text: { pt: 'Não', en: 'No' } },
+      { id: 'pnd', text: { pt: 'Prefiro não dizer', en: 'Prefer not to say' } },
+    ],
+    open: 'sim',
+    closedNote: {
+      pt: 'Obrigado. Não precisa de responder ao resto desta secção e pode avançar. Se quiser, diga-nos se sente que a escola respeita a fé da sua família.',
+      en: "Thank you. You do not need to answer the rest of this section and can continue. If you wish, tell us whether you feel the school respects your family's faith.",
+    },
+  },
+  questions: [
+    { id: 'aulas', type: 'scale', required: true, text: { pt: 'Qualidade das aulas de Estudos Bíblicos', en: 'Quality of the Bible Study lessons' } },
+    { id: 'idade', type: 'scale', required: true, text: { pt: 'Os temas e as histórias são adequados à idade do meu educando', en: "The topics and stories suit my child's age" } },
+    { id: 'informa', type: 'scale', required: true, text: { pt: 'A escola informa os pais sobre o que é ensinado (temas, versículos, atividades)', en: 'The school tells parents what is taught (topics, verses, activities)' } },
+    { id: 'momentos', type: 'scale', required: true, text: { pt: 'Organização dos momentos de oração e devocionais', en: 'Organisation of prayer and devotional times' } },
+    { id: 'respeito', type: 'scale', required: true, forAll: true, text: { pt: 'A escola respeita a fé e as convicções de cada família', en: "The school respects each family's faith and beliefs" } },
+    { id: 'geral', type: 'scale', required: true, text: { pt: 'Satisfação geral com a Educação Cristã este ano', en: 'Overall satisfaction with Christian Education this year' } },
+
+    {
+      id: 'dev_fala', type: 'choice', required: true,
+      group: { pt: 'O que notou no seu educando ao longo do ano?', en: 'What have you noticed in your child this year?' },
+      text: { pt: 'Fala em casa sobre o que aprende nos Estudos Bíblicos', en: 'Talks at home about what they learn in Bible Study' },
+    },
+    { id: 'dev_conhece', type: 'choice', required: true, text: { pt: 'Conhece mais histórias bíblicas, orações ou versículos do que no início do ano', en: 'Knows more Bible stories, prayers or verses than at the start of the year' } },
+    { id: 'dev_valores', type: 'choice', required: true, text: { pt: 'Mostra mais respeito, partilha, perdão e responsabilidade', en: 'Shows more respect, sharing, forgiveness and responsibility' } },
+    { id: 'dev_gosta', type: 'choice', required: true, text: { pt: 'Gosta das aulas e dos momentos de oração', en: 'Enjoys the lessons and prayer times' } },
+
+    {
+      id: 'bem', type: 'text',
+      group: { pt: 'A sua opinião', en: 'Your opinion' },
+      text: { pt: 'O que correu bem este ano na Educação Cristã?', en: 'What went well in Christian Education this year?' },
+      placeholder: { pt: 'Escreva à vontade, com as suas palavras…', en: 'Write freely, in your own words…' },
+    },
+    {
+      id: 'errado', type: 'text',
+      text: { pt: 'O que correu mal ou o que deveria mudar?', en: 'What went wrong, or what should change?' },
+      placeholder: { pt: 'Todas as opiniões são lidas pela Direção…', en: 'Every opinion is read by the leadership…' },
+    },
+    { id: 'obs', type: 'text', forAll: true, text: { pt: 'Outros comentários ou observações', en: 'Other comments or observations' } },
+  ],
+}
+
 /** Perguntas repetidas para CADA professor da turma. */
 export const TEACHER_QUESTIONS: Question[] = [
   { id: 'comunica_progresso', type: 'scale', required: true, text: { pt: 'Comunica comigo sobre o progresso do meu educando', en: "Communicates with me about my child's progress" } },
@@ -224,6 +296,7 @@ export const IMPROVEMENT_OPTIONS: { id: string; text: Text }[] = [
   { id: 'atendimento', text: { pt: 'Atendimento', en: 'Front office service' } },
   { id: 'tecnologia', text: { pt: 'Tecnologia', en: 'Technology' } },
   { id: 'horarios', text: { pt: 'Horários', en: 'Timetables' } },
+  { id: 'educacao_crista', text: { pt: 'Educação Cristã', en: 'Christian Education' } },
   { id: 'outro', text: { pt: 'Outro', en: 'Other' } },
 ]
 

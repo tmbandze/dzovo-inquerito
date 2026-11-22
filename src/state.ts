@@ -1,7 +1,7 @@
 import {
-  ADMINISTRACAO, CAMPUSES, DIRECAO, DURATION_OPTIONS, EDICAO, ENDPOINT_URL, GRADES,
+  ADMINISTRACAO, CAMPUSES, CHOICE_OPTIONS, DIRECAO, DURATION_OPTIONS, EDUCACAO_CRISTA, EDICAO, ENDPOINT_URL, GRADES,
   IMPROVEMENT_OPTIONS, ORGANIZACAO, PROGRAMS, TEACHERS, TEACHER_QUESTIONS,
-  type CurriculumId, type ProgramId, type RatingSection, type Teacher,
+  type CurriculumId, type ProgramId, type Question, type RatingSection, type Teacher,
 } from './config/survey'
 import type { Lang } from './i18n'
 
@@ -18,6 +18,8 @@ export type Answers = {
   duration?: number
   /** chave: `${secção}.${pergunta}` */
   ratings: Record<string, Rating>
+  /** perguntas 'choice' — chave: `${secção}.${pergunta}`, valor: id de CHOICE_OPTIONS */
+  choices: Record<string, string>
   /** chave: `${secção}.${pergunta}` */
   texts: Record<string, string>
   teachers: Record<string, TeacherAnswer>
@@ -31,11 +33,26 @@ export type Answers = {
 }
 
 export const emptyAnswers = (): Answers => ({
-  ratings: {}, texts: {}, teachers: {}, improvements: [], improvementOther: '',
+  ratings: {}, choices: {}, texts: {}, teachers: {}, improvements: [], improvementOther: '',
   like: '', improve: '', comments: '', contact: { wants: false, name: '', phone: '', subject: '' },
 })
 
-export const RATING_SECTIONS: RatingSection[] = [ORGANIZACAO, DIRECAO, ADMINISTRACAO]
+/** Todas as secções de perguntas, pela ordem das colunas na folha. */
+export const RATING_SECTIONS: RatingSection[] = [ORGANIZACAO, DIRECAO, ADMINISTRACAO, EDUCACAO_CRISTA]
+
+/** Resposta à pergunta de entrada da secção (id da opção), se houver. */
+export const gateOf = (s: RatingSection, a: Answers) => (s.gate ? a.choices[`${s.id}.${s.gate.id}`] : undefined)
+
+/** Perguntas que o encarregado vê, conforme a resposta à pergunta de entrada.
+ *  Sem resposta à entrada: nenhuma. Entrada fechada: só as "forAll", todas opcionais. */
+export function visibleQuestions(s: RatingSection, a: Answers): { q: Question; required: boolean }[] {
+  const all = s.questions.map((q) => ({ q, required: !!q.required }))
+  if (!s.gate) return all
+  const g = gateOf(s, a)
+  if (g === undefined) return []
+  if (g === s.gate.open) return all
+  return all.filter(({ q }) => q.forAll).map(({ q }) => ({ q, required: false }))
+}
 
 export const teacherKey = (t: Teacher) => `${t.name}|${t.subject.pt}`
 
@@ -77,7 +94,8 @@ export function loadDraft(): Draft | null {
     const d = JSON.parse(raw) as Draft
     // rascunhos com mais de 7 dias são ignorados
     if (Date.now() - d.savedAt > 7 * 24 * 3600 * 1000) return null
-    return d
+    // rascunhos de antes de haver campos novos (ex.: choices) recebem os valores vazios
+    return { ...d, answers: { ...emptyAnswers(), ...d.answers } }
   } catch {
     return null
   }
@@ -134,9 +152,16 @@ export function buildPayload(a: Answers, lang: Lang) {
   }
 
   for (const s of RATING_SECTIONS) {
+    if (s.gate) resposta[`${s.id}_${s.gate.id}`] = s.gate.options.find((o) => o.id === gateOf(s, a))?.text.pt ?? ''
+    // perguntas escondidas vão vazias (ex.: respondeu "Sim" e depois mudou para "Não")
+    const visible = new Set(visibleQuestions(s, a).map(({ q }) => q.id))
     for (const q of s.questions) {
       const key = `${s.id}.${q.id}`
-      resposta[`${s.id}_${q.id}`] = q.type === 'scale' ? (a.ratings[key] ?? '') : (a.texts[key] ?? '').trim()
+      const col = `${s.id}_${q.id}`
+      if (!visible.has(q.id)) { resposta[col] = ''; continue }
+      if (q.type === 'scale') resposta[col] = a.ratings[key] ?? ''
+      else if (q.type === 'choice') resposta[col] = CHOICE_OPTIONS.find((o) => o.id === a.choices[key])?.text.pt ?? ''
+      else resposta[col] = (a.texts[key] ?? '').trim()
     }
   }
 

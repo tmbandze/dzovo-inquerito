@@ -1,22 +1,28 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
-  CAMPUSES, DURATION_OPTIONS, GRADES, IMPROVEMENT_OPTIONS,
-  MAX_IMPROVEMENTS, PROGRAMS, TEACHER_QUESTIONS, type ProgramId, type RatingSection, type Teacher,
+  ADMINISTRACAO, CAMPUSES, DIRECAO, DURATION_OPTIONS, EDUCACAO_CRISTA, GRADES, IMPROVEMENT_OPTIONS,
+  MAX_IMPROVEMENTS, ORGANIZACAO, PROGRAMS, TEACHER_QUESTIONS, type ProgramId, type RatingSection, type Teacher,
 } from './config/survey'
 import { ui, type Lang } from './i18n'
 import {
-  Brand, ChoiceCard, Chip, ErrorBanner, Icon, LangContext, type IconName, LanguageButton, PageIntro,
-  RatingScale, SurveyButton, TextField, useT,
+  Brand, ChoiceCard, ChoiceScale, Chip, ErrorBanner, Icon, LangContext, type IconName, LanguageButton, PageIntro,
+  RatingScale, SurveyButton, TextField, rovingRadio, useT,
 } from './components'
 import {
-  RATING_SECTIONS, campusOf, clearDraft, emptyAnswers, gradeOf, loadDraft, loadLang, needsProgram,
+  campusOf, gateOf, visibleQuestions, clearDraft, emptyAnswers, gradeOf, loadDraft, loadLang, needsProgram,
   programOf, saveDraft, saveLang, submit, teacherKey, teachersFor, type Answers, type Rating, type SubmitResult,
 } from './state'
 
 // Ecrãs: 0 boas-vindas · 1 identificação · 2–4 secções de escala · 5 professores
-//        6 melhorias · 7 final · 8 agradecimento
-const TOTAL_SECTIONS = 7
-const THANKS = 8
+//        6 educação cristã · 7 melhorias · 8 final · 9 agradecimento
+const TEACHERS_SCREEN = 5
+const IMPROVEMENTS_SCREEN = 7
+const LAST = 8
+const TOTAL_SECTIONS = LAST
+const THANKS = LAST + 1
+
+/** Ecrãs feitos de perguntas (RatingPage). */
+const SECTION_SCREENS: Record<number, RatingSection> = { 2: ORGANIZACAO, 3: DIRECAO, 4: ADMINISTRACAO, 6: EDUCACAO_CRISTA }
 
 type Patch = (fn: (a: Answers) => Answers) => void
 
@@ -30,13 +36,17 @@ function missingFor(screen: number, a: Answers): string[] {
     else if (needsProgram(a) && !programOf(a)) miss.push('f-program')
     if (a.duration === undefined) miss.push('f-duration')
   }
-  if (screen >= 2 && screen <= 4) {
-    const s = RATING_SECTIONS[screen - 2]
-    for (const q of s.questions) {
-      if (q.required && q.type === 'scale' && a.ratings[`${s.id}.${q.id}`] === undefined) miss.push(`q-${s.id}.${q.id}`)
+  const s = SECTION_SCREENS[screen]
+  if (s) {
+    if (s.gate && gateOf(s, a) === undefined) miss.push(`q-${s.id}.${s.gate.id}`)
+    for (const { q, required } of visibleQuestions(s, a)) {
+      const key = `${s.id}.${q.id}`
+      if (!required) continue
+      if (q.type === 'scale' && a.ratings[key] === undefined) miss.push(`q-${key}`)
+      if (q.type === 'choice' && a.choices[key] === undefined) miss.push(`q-${key}`)
     }
   }
-  if (screen === 5) {
+  if (screen === TEACHERS_SCREEN) {
     for (const t of teachersFor(a)) {
       const ans = a.teachers[teacherKey(t)]
       for (const q of TEACHER_QUESTIONS) {
@@ -97,7 +107,7 @@ export default function App() {
       })
       return
     }
-    if (screen === 7) {
+    if (screen === LAST) {
       setSending(true)
       setSendError(false)
       try {
@@ -125,7 +135,7 @@ export default function App() {
   const resume = () => {
     if (!draft) return
     setAnswers(draft.answers)
-    go(Math.min(Math.max(draft.screen, 1), 7))
+    go(Math.min(Math.max(draft.screen, 1), LAST))
   }
 
   /** Mantém classe/currículo ao responder por outro educando? Não: começa limpo. */
@@ -139,14 +149,14 @@ export default function App() {
     content = (
       <PageShell section={screen} onHome={() => go(0)}>
         {screen === 1 && <Identification {...ctx} />}
-        {screen >= 2 && screen <= 4 && <RatingPage section={RATING_SECTIONS[screen - 2]} {...ctx} />}
-        {screen === 5 && <Teachers {...ctx} />}
-        {screen === 6 && <Improvements {...ctx} />}
-        {screen === 7 && <FinalComments {...ctx} />}
+        {SECTION_SCREENS[screen] && <RatingPage key={screen} section={SECTION_SCREENS[screen]} {...ctx} />}
+        {screen === TEACHERS_SCREEN && <Teachers {...ctx} />}
+        {screen === IMPROVEMENTS_SCREEN && <Improvements {...ctx} />}
+        {screen === LAST && <FinalComments {...ctx} />}
         <Actions
           onBack={() => go(screen - 1)}
           onNext={tryNext}
-          last={screen === 7}
+          last={screen === LAST}
           sending={sending}
           error={missing.length > 0 ? 'required' : sendError ? 'send' : undefined}
         />
@@ -313,44 +323,64 @@ function Identification({ answers, patch, missing }: Ctx) {
 const PROGRAM_ICONS: Record<ProgramId, IconName> = { bilingue: 'users', cambridge: 'book', nacional: 'school' }
 
 // ---------------------------------------------------------------------
-// 2–4 · Secções com escala (Organização, Direção, Administração)
+// 2–4 e 6 · Secções de perguntas (Organização, Direção, Administração, Educação Cristã)
 // ---------------------------------------------------------------------
 function RatingPage({ section, answers, patch, missing }: Ctx & { section: RatingSection }) {
   const t = useT()
   const setRating = (key: string, v: Rating) => patch((a) => ({ ...a, ratings: { ...a.ratings, [key]: v } }))
+  const setChoice = (key: string, v: string) => patch((a) => ({ ...a, choices: { ...a.choices, [key]: v } }))
+  const gate = section.gate
+  const gateKey = gate ? `${section.id}.${gate.id}` : ''
+  const gateValue = gate ? gateOf(section, answers) : undefined
+  // com a entrada fechada, os títulos de grupo das perguntas escondidas não fazem sentido
+  const showGroups = !gate || gateValue === gate.open
   const setText = (key: string, v: string) => patch((a) => ({ ...a, texts: { ...a.texts, [key]: v } }))
   return (
     <>
       <ContextTag answers={answers} />
       <PageIntro eyebrow={t(section.eyebrow)} title={t(section.title)} subtitle={t(section.subtitle)} />
+      {gate && (
+        <article id={`q-${gateKey}`} className={`question-card gate-card ${gateValue !== undefined ? 'answered' : ''} ${missing.includes(`q-${gateKey}`) ? 'has-error' : ''}`}>
+          <div className="question-top">
+            <h2>{t(gate.text)}</h2>
+          </div>
+          <ChoiceScale stack label={t(gate.text)} options={gate.options} value={gateValue} onChange={(v) => setChoice(gateKey, v)} />
+          {gateValue !== undefined && gateValue !== gate.open && (
+            <p className="gate-note"><Icon name="check" size={16} /> {t(gate.closedNote)}</p>
+          )}
+        </article>
+      )}
       <div className="question-list">
-        {section.questions.map((q) => {
+        {visibleQuestions(section, answers).map(({ q, required }) => {
           const key = `${section.id}.${q.id}`
+          const group = showGroups && q.group && <h2 key={`g-${key}`} className="question-group">{t(q.group)}</h2>
           if (q.type === 'text') {
-            return (
+            return [group,
               <TextField
                 key={key}
                 standalone
-                optional={!q.required}
+                optional={!required}
                 label={t(q.text)}
                 placeholder={q.placeholder && t(q.placeholder)}
                 value={answers.texts[key] ?? ''}
                 onChange={(v) => setText(key, v)}
                 rows={q.placeholder ? 4 : 3}
-              />
-            )
+              />,
+            ]
           }
-          const value = answers.ratings[key]
+          const value = q.type === 'choice' ? answers.choices[key] : answers.ratings[key]
           const err = missing.includes(`q-${key}`)
-          return (
+          return [group,
             <article key={key} id={`q-${key}`} className={`question-card ${value !== undefined ? 'answered' : ''} ${err ? 'has-error' : ''}`}>
               <div className="question-top">
                 <h2>{t(q.text)}</h2>
                 {value !== undefined && <span className="answered-badge"><Icon name="check" size={14} />{t(ui.answered)}</span>}
               </div>
-              <RatingScale label={t(q.text)} value={value} onChange={(v) => setRating(key, v)} />
-            </article>
-          )
+              {q.type === 'choice'
+                ? <ChoiceScale label={t(q.text)} value={answers.choices[key]} onChange={(v) => setChoice(key, v)} />
+                : <RatingScale label={t(q.text)} value={answers.ratings[key]} onChange={(v) => setRating(key, v)} />}
+            </article>,
+          ]
         })}
       </div>
     </>
@@ -462,7 +492,7 @@ function Teachers({ answers, patch, missing, attempt }: Ctx) {
 const AVATAR_COLORS = ['#1c3a63', '#526a8b', '#7a5776', '#2f6b5e', '#8a5a2b', '#3d4f9a']
 
 // ---------------------------------------------------------------------
-// 6 · Melhorias
+// 7 · Melhorias
 // ---------------------------------------------------------------------
 function Improvements({ answers, patch }: Ctx) {
   const t = useT()
@@ -505,20 +535,21 @@ function Improvements({ answers, patch }: Ctx) {
 }
 
 // ---------------------------------------------------------------------
-// 7 · Comentários finais
+// 8 · Comentários finais
 // ---------------------------------------------------------------------
 function FinalComments({ answers, patch }: Ctx) {
   const t = useT()
   const c = answers.contact
   const setContact = (p: Partial<Answers['contact']>) => patch((a) => ({ ...a, contact: { ...a.contact, ...p } }))
+  const npsRadio = rovingRadio(Array.from({ length: 11 }, (_, n) => n), answers.nps, (n) => patch((a) => ({ ...a, nps: n })))
   return (
     <>
       <PageIntro eyebrow={t(ui.finEyebrow)} title={t(ui.finTitle)} subtitle={t(ui.finSubtitle)} />
       <article className="nps-card">
         <h2>{t(ui.qNps)}</h2>
-        <div className="nps-scale" role="radiogroup" aria-label={t(ui.qNps)}>
+        <div className="nps-scale" role="radiogroup" aria-label={t(ui.qNps)} onKeyDown={npsRadio.onKeyDown}>
           {Array.from({ length: 11 }, (_, n) => (
-            <button key={n} type="button" role="radio" aria-checked={answers.nps === n} className={answers.nps === n ? 'selected' : ''} onClick={() => patch((a) => ({ ...a, nps: n }))}>
+            <button key={n} type="button" role="radio" tabIndex={npsRadio.tabIndex(n)} aria-checked={answers.nps === n} className={answers.nps === n ? 'selected' : ''} onClick={() => patch((a) => ({ ...a, nps: n }))}>
               {n}
             </button>
           ))}
@@ -557,7 +588,7 @@ function FinalComments({ answers, patch }: Ctx) {
 }
 
 // ---------------------------------------------------------------------
-// 8 · Agradecimento
+// 9 · Agradecimento
 // ---------------------------------------------------------------------
 function ThankYou({ result, onAnother }: { result: SubmitResult; onAnother: () => void }) {
   const t = useT()
