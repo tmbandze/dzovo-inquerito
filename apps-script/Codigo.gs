@@ -248,6 +248,7 @@ function onOpen() {
   SpreadsheetApp.getUi().createMenu('Inquérito')
     .addItem('Atualizar painel', 'atualizarPainel')
     .addItem('Criar PDF para imprimir', 'criarPdfs')
+    .addItem('Criar PDF de cada professor', 'criarPdfsProfessores')
     .addItem('Atualizar automaticamente (de hora a hora)', 'ativarAtualizacaoAutomatica')
     .addSeparator()
     .addItem('Apagar respostas de teste', 'apagarRespostasTeste')
@@ -260,7 +261,9 @@ function onEdit(e) {
   if (!e) return
   const sh = e.range.getSheet()
   const nome = sh.getName()
-  if ((nome === SHEET_PAINEL && e.range.getRow() === LINHA_FILTROS) || nome === SHEET_RESPOSTAS || nome === SHEET_PROFESSORES) {
+  if ((nome === SHEET_PAINEL && e.range.getRow() === LINHA_FILTROS) ||
+      (nome === SHEET_PAINEL_PROF && e.range.getRow() === LINHA_FILTRO_PROF) ||
+      nome === SHEET_RESPOSTAS || nome === SHEET_PROFESSORES) {
     redesenhar_(e.source)
   }
 }
@@ -369,6 +372,14 @@ function apagarTodasRespostas() {
 }
 
 function desenharPaineis_(ss) {
+  const ctx = contexto_(ss)
+  desenharPainel_(ctx.painel, ctx)
+  desenharPainelProf_(ss.getSheetByName(SHEET_PAINEL_PROF) || ss.insertSheet(SHEET_PAINEL_PROF, 1), ctx)
+  desenharPainelDir_(ss.getSheetByName(SHEET_PAINEL_DIR) || ss.insertSheet(SHEET_PAINEL_DIR, 2), ctx)
+}
+
+/** Lê as respostas e os filtros do Painel: é o que os três painéis desenham. */
+function contexto_(ss) {
   const painel = ss.getSheetByName(SHEET_PAINEL) || ss.insertSheet(SHEET_PAINEL, 0)
   const todas = lerRegistos_(ss, SHEET_RESPOSTAS)
   const filtros = lerFiltros_(painel)
@@ -380,16 +391,16 @@ function desenharPaineis_(ss) {
   // avaliações de professores cuja resposta foi apagada da folha Respostas não contam
   const ids = {}
   todas.forEach(function (r) { ids[r.id_resposta] = true })
-  const ctx = {
+  const todosProf = lerRegistos_(ss, SHEET_PROFESSORES).filter(function (p) { return ids[p.id_resposta] })
+  return {
+    painel: painel,
     tz: ss.getSpreadsheetTimeZone(),
     filtros: filtros,
     todas: todas,
     respostas: todas.filter(passa),
-    professores: lerRegistos_(ss, SHEET_PROFESSORES).filter(function (p) { return ids[p.id_resposta] }).filter(passa),
+    todosProf: todosProf,
+    professores: todosProf.filter(passa),
   }
-  desenharPainel_(painel, ctx)
-  desenharPainelProf_(ss.getSheetByName(SHEET_PAINEL_PROF) || ss.insertSheet(SHEET_PAINEL_PROF, 1), ctx)
-  desenharPainelDir_(ss.getSheetByName(SHEET_PAINEL_DIR) || ss.insertSheet(SHEET_PAINEL_DIR, 2), ctx)
 }
 
 const PASTA_RELATORIOS = 'Relatórios do Inquérito'
@@ -414,10 +425,14 @@ function criarPdfs() {
   const filtros = descreverFiltros_(lerFiltros_(ss.getSheetByName(SHEET_PAINEL)))
   const quando = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd HH.mm')
   const pasta = pastaRelatorios_(ss)
+  let prof = lerProfessor_(ss.getSheetByName(SHEET_PAINEL_PROF))
+  if (distintos_(contexto_(ss).todosProf, 'professor').indexOf(prof) === -1) prof = TODOS
   const itens = [
     [SHEET_PAINEL, 'Resultados gerais', true, ''],
     [SHEET_PAINEL_DIR, 'Liderança da escola', true, 'confidencial'],
-    [SHEET_PAINEL_PROF, 'Avaliação dos professores', false, 'confidencial, A4 deitado'],
+    prof === TODOS
+      ? [SHEET_PAINEL_PROF, 'Avaliação dos professores', false, 'confidencial, A4 deitado']
+      : [SHEET_PAINEL_PROF, 'Avaliação: ' + prof, true, 'confidencial'],
   ].map(function (i) {
     const sh = ss.getSheetByName(i[0])
     if (!sh) return ''
@@ -438,6 +453,64 @@ function criarPdfs() {
     '<p>Clique para abrir o PDF e use o botão de imprimir. Ficam guardados no Google Drive, na pasta <b style="display:inline">' + PASTA_RELATORIOS + '</b>. ' +
     'Os confidenciais são só para os responsáveis da escola.</p>' + itens
   SpreadsheetApp.getUi().showModalDialog(HtmlService.createHtmlOutput(html).setWidth(440).setHeight(400), 'PDF para imprimir')
+}
+
+/**
+ * Um PDF por professor (relatório individual, A4 ao alto) numa subpasta nova de
+ * "Relatórios do Inquérito". Usa os filtros do Painel (recinto, currículo, classe, edição).
+ * O cadeado só é pedido para desenhar cada professor: uma resposta que chegue entretanto
+ * é gravada sem esperar pelo fim.
+ */
+function criarPdfsProfessores() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet()
+  const ui = SpreadsheetApp.getUi()
+  const sh = ss.getSheetByName(SHEET_PAINEL_PROF) || ss.insertSheet(SHEET_PAINEL_PROF, 1)
+  const ctx = contexto_(ss)
+  const nomes = distintos_(ctx.professores, 'professor')
+  if (!nomes.length) {
+    ui.alert('Não há avaliações de professores para os filtros escolhidos no Painel.')
+    return
+  }
+  ss.toast('A criar ' + nomes.length + ' PDFs (cerca de ' + Math.ceil(nomes.length * 8 / 60) + ' min). Não feche a folha.', 'Inquérito', 300)
+  const original = lerProfessor_(sh)
+  const quando = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd HH.mm')
+  const pasta = pastaRelatorios_(ss).createFolder('Professores — ' + quando)
+  const inicio = Date.now(), feitos = [], falhas = []
+  try {
+    nomes.forEach(function (nome) {
+      if (Date.now() - inicio > 4.5 * 60 * 1000) { falhas.push(nome + ' (sem tempo: volte a usar o menu)'); return }
+      const lock = LockService.getScriptLock()
+      lock.waitLock(30000)
+      try {
+        desenharPainelProf_(sh, ctx, nome)
+        SpreadsheetApp.flush()
+      } finally {
+        lock.releaseLock()
+      }
+      try {
+        pasta.createFile(exportarPdf_(ss, sh, true).setName(nome + ' — ' + quando + '.pdf'))
+        feitos.push(nome)
+      } catch (err) {
+        console.error('PDF de ' + nome + ' não criado: ' + err)
+        falhas.push(nome + ' (' + err + ')')
+      }
+      Utilities.sleep(1000)
+    })
+  } finally {
+    // o separador volta ao professor (ou "Todos") que estava escolhido
+    const lock = LockService.getScriptLock()
+    lock.waitLock(30000)
+    try { desenharPainelProf_(sh, contexto_(ss), original) } finally { lock.releaseLock() }
+  }
+  const esc = function (t) { return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;') }
+  const html = '<style>body{font-family:Arial,sans-serif;color:#1f2937;margin:0}p{margin:0 0 12px;font-size:14px;line-height:1.45}' +
+    'a{display:block;margin:0 0 12px;padding:12px 14px;border:1px solid #dbe2ea;border-radius:10px;color:#1c3a63;text-decoration:none;font-weight:bold}' +
+    'a:hover{background:#e8eef6}ul{margin:0;padding-left:18px;font-size:13px;color:#b91c1c}</style>' +
+    '<p>Criados <b>' + feitos.length + '</b> de ' + nomes.length + ' PDFs, um por professor, com os filtros: <b>' + esc(descreverFiltros_(ctx.filtros)) + '</b>.</p>' +
+    '<a href="' + pasta.getUrl() + '" target="_blank">Abrir a pasta "' + esc(pasta.getName()) + '"</a>' +
+    '<p>Os relatórios são confidenciais: só para a Direção e os responsáveis da escola.</p>' +
+    (falhas.length ? '<p>Não foi possível criar:</p><ul><li>' + falhas.map(esc).join('</li><li>') + '</li></ul>' : '')
+  ui.showModalDialog(HtmlService.createHtmlOutput(html).setWidth(440).setHeight(falhas.length ? 360 : 260), 'PDF de cada professor')
 }
 
 /** PDF de um separador, pedido ao Google com a conta de quem usa o menu. */
@@ -778,6 +851,31 @@ function linhaContagem_(g, rotulo, n, total, cor) {
   g.estilo('envolver', a1_(r, 2)).estilo('linha', a1_(r, 2, 8)).estilo('inteiro', a1_(r, 3)).estilo('pct', a1_(r, 7))
 }
 
+/** Quatro cartões (rótulo, número grande, nota) nas colunas B, C:D, E:F e G:H. */
+function cartoes_(g, cartoes) {
+  const l1 = {}, l2 = {}, l3 = {}
+  cartoes.forEach(function (k, i) {
+    const c = BLOCOS[i][0]
+    l1[c] = k.rotulo; l2[c] = typeof k.valor === 'number' ? k.valor : '—'; l3[c] = k.nota
+  })
+  const r1 = g.linha(l1, 28), r2 = g.linha(l2, 46), r3 = g.linha(l3, 40)
+  BLOCOS.forEach(function (b, i) {
+    ;[r1, r2, r3].forEach(function (r) { g.unir(a1_(r, b[0], b[1])) })
+    g.estilo('cartao', a1_(r1, b[0], b[1], r3)).estilo('margem', a1_(r1, b[0], b[1], r3))
+    g.estilo('rotulo', a1_(r1, b[0], b[1])).estilo('cartaoValor', a1_(r2, b[0], b[1])).estilo('nota', a1_(r3, b[0], b[1])).estilo('centro', a1_(r3, b[0], b[1]))
+    g.formatos.push({ a1: a1_(r2, b[0]), formato: cartoes[i].formato })
+  })
+}
+
+/** Linha com a média de uma pergunta, barra, média da escola para comparar e nº de respostas. */
+function linhaComparada_(g, rotulo, e, escola, forte) {
+  const r = g.linha({ 2: rotulo, 3: e.media, 4: barra_(e.media, 5, corNota_(e.media)), 7: escola, 8: e.n }, alturaTexto_(rotulo, LARGURA_ROTULO))
+  g.unir(a1_(r, 4, 6))
+  g.estilo('envolver', a1_(r, 2)).estilo('linha', a1_(r, 2, 8)).estilo('media', a1_(r, 3)).estilo('media', a1_(r, 7)).estilo('centro', a1_(r, 8))
+  if (forte) g.estilo('forte', a1_(r, 2))
+  g.gradientes.push(a1_(r, 3))
+}
+
 function atualizadoEm_(ctx) {
   return Utilities.formatDate(new Date(), ctx.tz, 'dd/MM/yyyy HH:mm')
 }
@@ -821,18 +919,7 @@ function desenharPainel_(sh, ctx) {
     { rotulo: 'NPS', valor: rec.nps, formato: '+0;-0;0',
       nota: rec.n ? pct_(rec.promotores, rec.n) + ' promotores · ' + pct_(rec.criticos, rec.n) + ' críticos' : 'sem respostas' },
   ]
-  const l1 = {}, l2 = {}, l3 = {}
-  cartoes.forEach(function (k, i) {
-    const c = BLOCOS[i][0]
-    l1[c] = k.rotulo; l2[c] = typeof k.valor === 'number' ? k.valor : '—'; l3[c] = k.nota
-  })
-  const r1 = g.linha(l1, 28), r2 = g.linha(l2, 46), r3 = g.linha(l3, 40)
-  BLOCOS.forEach(function (b, i) {
-    ;[r1, r2, r3].forEach(function (r) { g.unir(a1_(r, b[0], b[1])) })
-    g.estilo('cartao', a1_(r1, b[0], b[1], r3)).estilo('margem', a1_(r1, b[0], b[1], r3))
-    g.estilo('rotulo', a1_(r1, b[0], b[1])).estilo('cartaoValor', a1_(r2, b[0], b[1])).estilo('nota', a1_(r3, b[0], b[1])).estilo('centro', a1_(r3, b[0], b[1]))
-    g.formatos.push({ a1: a1_(r2, b[0]), formato: cartoes[i].formato })
-  })
+  cartoes_(g, cartoes)
 
   if (!R.length) {
     secao_(g, 'Ainda não há respostas para estes filtros.', 8)
@@ -1031,19 +1118,62 @@ function validarFiltros_(sh, ctx) {
 // Separador "Painel Professores" (confidencial)
 // ---------------------------------------------------------------------
 
-function desenharPainelProf_(sh, ctx) {
-  const P = ctx.professores
+/** Linha do campo "Professor(a)" no separador Painel Professores (coluna B). */
+const LINHA_FILTRO_PROF = 6
+
+function lerProfessor_(sh) {
+  if (!sh || sh.getLastRow() < LINHA_FILTRO_PROF) return TODOS
+  return String(sh.getRange(LINHA_FILTRO_PROF, 2).getValue()) || TODOS
+}
+
+/**
+ * Com "Todos": tabela de todos os professores (A4 deitado).
+ * Com um nome: relatório individual desse professor (A4 ao alto).
+ * professor: opcional; sem ele, usa o nome escolhido no próprio separador.
+ */
+function desenharPainelProf_(sh, ctx, professor) {
+  const nomes = distintos_(ctx.todosProf, 'professor')
+  let escolhido = professor || lerProfessor_(sh)
+  if (escolhido !== TODOS && nomes.indexOf(escolhido) === -1) escolhido = TODOS
+
+  const individual = escolhido !== TODOS
   const colunas = Object.keys(PERGUNTAS_PROF)
-  const ultima = 6 + colunas.length // B–E dados, F… perguntas, última coluna = barra
-  const g = novaGrelha_(ultima, 1000)
+  const ultima = individual ? 8 : 6 + colunas.length // tabela: B–E dados, F… perguntas, última = barra
+  const g = novaGrelha_(ultima, individual ? LARGURA_TEXTO : 1000)
+  const sub = 'CONFIDENCIAL — apenas para a Direção e os responsáveis da escola  ·  ' + descreverFiltros_(ctx.filtros) + '  ·  atualizado em ' + atualizadoEm_(ctx)
+  titulo_(g, individual ? escolhido : 'Avaliação dos professores', sub, ultima)
+  espaco_(g, 12)
 
-  titulo_(g, 'Avaliação dos professores',
-    'CONFIDENCIAL — apenas para a Direção  ·  ' + descreverFiltros_(ctx.filtros) + '  ·  atualizado em ' + atualizadoEm_(ctx), ultima)
-  notaLinha_(g, 'nota', 'Os filtros escolhem-se no separador Painel. Cada linha resume as avaliações dos encarregados a um(a) professor(a).')
+  // campo "Professor(a)"
+  const rRot = g.linha({ 2: 'Professor(a)' }, 18), rFil = g.linha({ 2: escolhido }, 30)
+  if (rFil !== LINHA_FILTRO_PROF) throw new Error('A linha do campo Professor(a) tem de ser a ' + LINHA_FILTRO_PROF)
+  g.unir(a1_(rRot, 2, 4)).unir(a1_(rFil, 2, 4))
+  g.estilo('rotulo', a1_(rRot, 2, 4)).estilo('filtro', a1_(rFil, 2, 4))
+  notaLinha_(g, 'nota', individual
+    ? 'Escolha "Todos" no campo acima para ver a tabela de todos os professores. Os outros filtros (recinto, currículo, classe, edição) escolhem-se no separador Painel.'
+    : 'Escolha um nome no campo acima para ver o relatório individual, com os comentários dos pais. Os outros filtros escolhem-se no separador Painel.')
 
+  if (individual) desenharProfessor_(g, ctx, escolhido)
+  else desenharTabelaProf_(g, ctx, colunas, ultima)
+
+  if (individual) {
+    aplicarGrelha_(sh, g, LARGURAS_PAINEL)
+  } else {
+    // A4 deitado: as colunas somam ≈ 1028 px, a largura útil da folha
+    const larguras = [12, 170, 110, 160, 72]
+    colunas.forEach(function () { larguras.push(68) })
+    larguras.push(96)
+    aplicarGrelha_(sh, g, larguras, true)
+  }
+  sh.getRange(LINHA_FILTRO_PROF, 2).setDataValidation(
+    SpreadsheetApp.newDataValidation().requireValueInList([TODOS].concat(nomes), true).setAllowInvalid(false).build())
+}
+
+function desenharTabelaProf_(g, ctx, colunas, ultima) {
+  const P = ctx.professores
   const grupos = {}
   P.forEach(function (p) {
-    // um professor = uma linha, mesmo que dê aulas em várias classes (ex.: Francês)
+    // um professor = uma linha por disciplina, mesmo que dê aulas em várias classes (ex.: Francês)
     const k = [p.professor, p.disciplina].join('|')
     if (!grupos[k]) grupos[k] = { p: p, regs: [], classes: [], recintos: [] }
     grupos[k].regs.push(p)
@@ -1080,12 +1210,75 @@ function desenharPainelProf_(sh, ctx) {
   espaco_(g, 18)
   notaLinha_(g, 'rodape', 'Linhas a cinzento: menos de 3 avaliações, interpretar com cuidado.')
   notaLinha_(g, 'rodape', 'Notas de 1 a 5. As respostas "Não sei" não entram nas contas.')
+}
 
-  // A4 deitado: as colunas somam ≈ 1028 px, a largura útil da folha
-  const larguras = [12, 170, 110, 160, 72]
-  colunas.forEach(function () { larguras.push(68) })
-  larguras.push(96)
-  aplicarGrelha_(sh, g, larguras, true)
+/** Relatório de um professor: resumo, cada pergunta ao lado da média da escola, turmas e comentários. */
+function desenharProfessor_(g, ctx, nome) {
+  const P = ctx.professores
+  const regs = P.filter(function (p) { return String(p.professor) === nome })
+  const colunas = Object.keys(PERGUNTAS_PROF)
+  if (!regs.length) {
+    secao_(g, 'Sem avaliações deste professor para os filtros escolhidos no Painel.', 8)
+    return
+  }
+  const turma = function (p) { return [p.classe, String(p.curriculo || '').replace('Currículo ', '')].filter(String).join(' · ') }
+  const disciplinas = distintos_(regs, 'disciplina')
+  notaLinha_(g, 'nota', 'Disciplina' + (disciplinas.length > 1 ? 's' : '') + ': ' + disciplinas.join('; ') +
+    '  ·  Turmas: ' + distintos_(regs, 'classe').join(', ') + '  ·  ' + distintos_(regs, 'recinto').join(' e '))
+  espaco_(g, 10)
+
+  const comentarios = regs.filter(function (p) { return String(p.comentario || '').trim() })
+  const geral = estatistica_(regs, ['prof_geral']), escolaGeral = estatistica_(P, ['prof_geral'])
+  const todas = estatistica_(regs, colunas)
+  cartoes_(g, [
+    { rotulo: 'Avaliações', valor: regs.length, formato: '0', nota: regs.length < 3 ? 'poucas: interpretar com cuidado' : 'encarregados avaliaram' },
+    { rotulo: 'Satisfação geral', valor: geral.media, formato: '0.0" / 5"',
+      nota: typeof escolaGeral.media === 'number' ? 'escola: ' + escolaGeral.media.toFixed(1).replace('.', ',') : '' },
+    { rotulo: 'Satisfeitos', valor: todas.satisfeitos, formato: '0%', nota: 'notas 4 ou 5' },
+    { rotulo: 'Comentários', valor: comentarios.length, formato: '0', nota: 'escritos pelos pais' },
+  ])
+
+  secao_(g, 'Por pergunta', 8)
+  cabecalho_(g, { 2: 'Pergunta', 3: 'Média', 7: 'Escola', 8: 'Respostas' }, 8, 3)
+  colunas.forEach(function (c) {
+    linhaComparada_(g, PERGUNTAS_PROF[c], estatistica_(regs, [c]), estatistica_(P, [c]).media, /_geral$/.test(c))
+  })
+
+  // por turma e disciplina, quando o professor dá aulas a mais do que uma
+  const grupos = {}
+  regs.forEach(function (p) {
+    const k = (disciplinas.length > 1 ? p.disciplina + '  ·  ' : '') + turma(p)
+    ;(grupos[k] = grupos[k] || []).push(p)
+  })
+  const chaves = Object.keys(grupos).sort(function (a, b) { return a.localeCompare(b, 'pt', { numeric: true }) })
+  if (chaves.length > 1) {
+    secao_(g, 'Por turma', 8)
+    cabecalho_(g, { 2: 'Turma', 3: 'Média', 7: 'Satisfeitos', 8: 'Avaliações' }, 8, 3)
+    chaves.forEach(function (k) {
+      const e = estatistica_(grupos[k], colunas)
+      linhaNota_(g, k, { media: e.media, satisfeitos: e.satisfeitos, n: grupos[k].length })
+    })
+  }
+
+  secao_(g, 'Comentários dos pais (' + comentarios.length + ')', 8)
+  if (!comentarios.length) {
+    notaLinha_(g, 'nota', 'Nenhum encarregado escreveu um comentário sobre este professor.')
+  } else {
+    const tempo = function (d) { return d instanceof Date ? d.getTime() : 0 }
+    comentarios.sort(function (a, b) { return tempo(b.data_hora) - tempo(a.data_hora) })
+    comentarios.forEach(function (p) {
+      const texto = String(p.comentario).trim()
+      const meta = (p.data_hora instanceof Date ? Utilities.formatDate(p.data_hora, ctx.tz, 'dd/MM') + ' · ' : '') + turma(p) +
+        (disciplinas.length > 1 ? '\n' + p.disciplina : '')
+      const linha = g.linha({ 2: meta, 3: clean_(texto) },
+        Math.max(alturaTexto_(texto, LARGURA_TEXTO - LARGURAS_PAINEL[1]), alturaTexto_(meta, LARGURA_ROTULO, 34)))
+      g.unir(a1_(linha, 3, 8))
+      g.estilo('meta', a1_(linha, 2)).estilo('quebra', a1_(linha, 2, 8)).estilo('linha', a1_(linha, 2, 8))
+    })
+  }
+
+  espaco_(g, 18)
+  notaLinha_(g, 'rodape', 'Notas de 1 (muito insatisfeito) a 5 (muito satisfeito). "Escola" = média de todos os professores com os mesmos filtros. "Não sei" não entra nas contas.')
 }
 
 // ---------------------------------------------------------------------

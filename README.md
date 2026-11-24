@@ -80,6 +80,8 @@ O mesmo `Codigo.gs` cria um menu **Inquérito** na Google Sheet (aparece ao abri
   este último com a folha deitada) na pasta **Relatórios do Inquérito** do Google Drive, ao lado da folha, e mostra
   os links para os abrir e imprimir. Na primeira vez o Google pede autorização para o script usar o Drive. As colunas estão feitas à medida do A4, por isso a letra
   sai no tamanho real (pelo menos 10 pt) e as secções que cabem numa página não ficam partidas.
+- **Criar PDF de cada professor**: cria, numa subpasta nova de Relatórios do Inquérito, um PDF por professor com
+  o relatório individual (respeita os filtros do Painel). Demora alguns segundos por professor.
 - **Atualizar automaticamente (de hora a hora)**: liga a atualização automática.
 - **Apagar respostas de teste**: apaga as linhas com `TESTE` na coluna `edicao`.
 - **Apagar TODAS as respostas (recomeçar do zero)**: apaga os separadores Respostas e Professores
@@ -89,6 +91,8 @@ Se apagares linhas à mão, o Painel redesenha-se sozinho, e as avaliações de 
 de uma resposta apagada deixam de contar.
 
 Os filtros (recinto, currículo, classe, edição) escolhem-se no topo do Painel e valem também para os PDFs.
+No **Painel Professores**, o campo **Professor(a)** no topo mostra a tabela de todos ("Todos") ou o relatório
+individual de um professor: cada pergunta ao lado da média da escola, resultados por turma e os comentários dos pais.
 Para imprimir, usar **Inquérito → Criar PDF para imprimir**. O painel não mostra dados de contacto.
 Não mudar o texto dos cabeçalhos das folhas Respostas e Professores: são usados para gravar.
 
